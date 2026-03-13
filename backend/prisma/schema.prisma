@@ -1,0 +1,108 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── USUARIO ──────────────────────────────────────────
+// Tabla principal de usuarios de Fit Hub
+model User {
+  id            String   @id @default(cuid())
+  clerkId       String   @unique  // ID que nos da Clerk
+  email         String   @unique
+  username      String   @unique
+  name          String
+  avatarUrl     String?
+  bio           String?
+
+  // Datos físicos
+  weight        Float?   // en kg
+  height        Float?   // en cm
+  bodyFat       Float?   // porcentaje (opcional)
+
+  // Gamificación
+  xp            Int      @default(0)
+  level         Int      @default(1)
+  streak        Int      @default(0)
+  lastWorkout   DateTime?
+
+  // Timestamps
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relaciones (las iremos usando después)
+  workouts      Workout[]
+  goals         Goal[]
+
+  @@map("users")
+}
+
+// ─── WORKOUT ──────────────────────────────────────────
+// Registro de cada sesión de entrenamiento
+model Workout {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String   // ej: "Pecho y Tríceps"
+  notes     String?
+  duration  Int?     // en minutos
+  xpEarned  Int      @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relaciones
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sets      WorkoutSet[]
+
+  @@map("workouts")
+}
+
+// ─── WORKOUT SET ──────────────────────────────────────
+// Cada serie dentro de un workout
+// ej: "Press banca - 3 series x 10 reps x 80kg"
+model WorkoutSet {
+  id         String  @id @default(cuid())
+  workoutId  String
+  exercise   String  // nombre del ejercicio
+  sets       Int     // número de series
+  reps       Int?    // repeticiones por serie
+  weight     Float?  // peso en kg
+  duration   Int?    // para cardio, en segundos
+  notes      String?
+
+  createdAt  DateTime @default(now())
+
+  // Relaciones
+  workout    Workout  @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+
+  @@map("workout_sets")
+}
+
+// ─── GOAL ─────────────────────────────────────────────
+// Objetivos del usuario generados por la IA
+model Goal {
+  id          String     @id @default(cuid())
+  userId      String
+  title       String     // ej: "Press banca 4 platos"
+  description String?
+  targetValue Float?     // valor objetivo
+  currentValue Float?    // valor actual
+  unit        String?    // ej: "kg", "km", "lbs"
+  isCompleted Boolean    @default(false)
+
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  // Relaciones
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("goals")
+}
