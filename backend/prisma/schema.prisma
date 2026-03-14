@@ -9,22 +9,22 @@ datasource db {
 
 // ─── USUARIO ──────────────────────────────────────────
 model User {
-  id            String    @id @default(cuid())
-  clerkId       String    @unique
-  email         String    @unique
-  username      String    @unique
-  name          String
-  avatarUrl     String?
-  bio           String?
-  weight        Float?
-  height        Float?
-  bodyFat       Float?
-  xp            Int       @default(0)
-  level         Int       @default(1)
-  streak        Int       @default(0)
-  lastWorkout   DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id          String    @id @default(cuid())
+  clerkId     String    @unique
+  email       String    @unique
+  username    String    @unique
+  name        String
+  avatarUrl   String?
+  bio         String?
+  weight      Float?
+  height      Float?
+  bodyFat     Float?
+  xp          Int       @default(0)
+  level       Int       @default(1)
+  streak      Int       @default(0)
+  lastWorkout DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   workouts         Workout[]
   goals            Goal[]
@@ -35,122 +35,93 @@ model User {
   @@map("users")
 }
 
-// ─── EJERCICIO GLOBAL ─────────────────────────────────
-// Base de datos global de ejercicios
-// Viene de ExerciseDB + los que nosotros agreguemos
-model Exercise {
-  id               String   @id @default(cuid())
-  externalId       String?  @unique // ID de ExerciseDB
-  name             String
-  bodyPart         String
-  target           String   // músculo primario
-  equipment        String
-  instructions     String[] // array de pasos
-  secondaryMuscles String[] // músculos secundarios
-  isCustom         Boolean  @default(false)
-  createdByUserId  String?  // null = ejercicio global
-
-  // Datos musculares para el modelo de estímulo
-  muscleActivations MuscleActivation[]
-
-  workoutSets     WorkoutSet[]
-  templateSets    TemplateSet[]
-  personalRecords PersonalRecord[]
-
-  createdAt DateTime @default(now())
-
-  @@map("exercises")
-}
-
 // ─── EJERCICIO PERSONALIZADO ──────────────────────────
-// Ejercicios creados por usuarios específicos
+// ÚNICO modelo de ejercicio en nuestra DB.
+// Solo ejercicios creados por usuarios.
+// Los ejercicios de ExerciseDB se consultan
+// en tiempo real y NUNCA se almacenan aquí.
 model CustomExercise {
   id               String   @id @default(cuid())
   userId           String
   name             String
   bodyPart         String
-  target           String
+  target           String   // músculo primario
   equipment        String
   notes            String?
   secondaryMuscles String[]
+  isPublic         Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workoutSets     WorkoutSet[]
+  templateSets    TemplateSet[]
+  personalRecords PersonalRecord[]
 
   @@map("custom_exercises")
 }
 
-// ─── ACTIVACIÓN MUSCULAR ──────────────────────────────
-// Qué porcentaje trabaja cada músculo en cada ejercicio
-// Ejemplo: Bench Press → Pecho 60%, Tríceps 25%, Hombro 15%
-model MuscleActivation {
-  id           String  @id @default(cuid())
-  exerciseId   String
-  muscleName   String  // "chest", "triceps", "anterior_deltoid"
-  activationPct Float  // 0.0 a 1.0 (60% = 0.6)
-  isPrimary    Boolean @default(false)
-
-  exercise Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
-
-  @@map("muscle_activations")
-}
-
 // ─── PLANTILLA DE WORKOUT ─────────────────────────────
-// Rutinas reutilizables
 model WorkoutTemplate {
   id          String   @id @default(cuid())
   userId      String
-  name        String   // "Pecho y Tríceps", "Push Day"
+  name        String
   description String?
   isPublic    Boolean  @default(false)
   timesUsed   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   templateSets TemplateSet[]
   workouts     Workout[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
   @@map("workout_templates")
 }
 
 // ─── SET DE PLANTILLA ─────────────────────────────────
-// Cada ejercicio dentro de una plantilla
+// Un ejercicio dentro de una plantilla.
+// Puede ser de ExerciseDB (externalId) o custom.
 model TemplateSet {
-  id           String  @id @default(cuid())
-  templateId   String
-  exerciseId   String
-  order        Int     // posición en la rutina (1, 2, 3...)
-  targetSets   Int     // sets recomendados
-  targetReps   Int?    // reps objetivo
-  targetWeight Float?  // peso sugerido
-  restSeconds  Int     @default(90)
-  notes        String?
+  id               String  @id @default(cuid())
+  templateId       String
+  order            Int
 
-  template WorkoutTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
-  exercise Exercise        @relation(fields: [exerciseId], references: [id])
+  // Referencia al ejercicio
+  // Solo uno de estos dos debe estar presente
+  externalId       String?          // ID de ExerciseDB
+  exerciseName     String           // nombre para mostrar
+  customExerciseId String?          // si es ejercicio custom
+
+  targetSets       Int     @default(3)
+  targetReps       Int?
+  targetWeight     Float?
+  restSeconds      Int     @default(90)
+  notes            String?
+
+  template        WorkoutTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  customExercise  CustomExercise? @relation(fields: [customExerciseId], references: [id])
 
   @@map("template_sets")
 }
 
 // ─── WORKOUT ──────────────────────────────────────────
-// Sesión de entrenamiento real
 model Workout {
   id          String    @id @default(cuid())
   userId      String
-  templateId  String?   // null si empezó vacío
+  templateId  String?
   name        String
   notes       String?
   startTime   DateTime
   endTime     DateTime?
   duration    Int?      // minutos
   xpEarned    Int       @default(0)
-  totalVolume Float     @default(0) // kg totales levantados
+  totalVolume Float     @default(0)
   isCompleted Boolean   @default(false)
 
   // Análisis muscular calculado al finalizar
-  muscleStimulus Json?  // {"chest": 0.75, "triceps": 0.15}
+  // Guardamos el resultado, no los datos fuente
+  muscleStimulus Json?
 
   user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   template WorkoutTemplate? @relation(fields: [templateId], references: [id])
@@ -163,35 +134,36 @@ model Workout {
 }
 
 // ─── WORKOUT SET ──────────────────────────────────────
-// Cada serie dentro de un workout
+// Cada serie dentro de un workout.
+// Guardamos externalId + name como referencia.
+// NUNCA guardamos gifUrl, instructions, etc.
 model WorkoutSet {
-  id          String  @id @default(cuid())
-  workoutId   String
-  exerciseId  String
-  order       Int     // orden del ejercicio en el workout
-  setNumber   Int     // número de serie (1, 2, 3...)
+  id    String @id @default(cuid())
+  workoutId String
+  order     Int    // orden del ejercicio en el workout
+  setNumber Int    // número de serie (1, 2, 3...)
+
+  // Referencia al ejercicio
+  // Solo uno de estos dos debe estar presente
+  externalId       String?  // ID de ExerciseDB (referencia)
+  exerciseName     String   // nombre para mostrar en historial
+  customExerciseId String?  // si es ejercicio custom
 
   // Datos del set
-  weight      Float?  // kg o lbs
+  weight      Float?
   reps        Int?
-  duration    Int?    // segundos (para cardio/planks)
-  distance    Float?  // km (para cardio)
-  rpe         Float?  // Rate of Perceived Exertion 1-10
+  duration    Int?   // segundos (cardio/planks)
+  distance    Float? // km (cardio)
+  rpe         Float? // Rate of Perceived Exertion 1-10
 
-  // Tipo de set
   setType     SetType @default(NORMAL)
-
-  // Descanso
-  restSeconds Int?    // descanso real tomado
-
-  // Estado
+  restSeconds Int?
   isCompleted Boolean @default(false)
-  isPR        Boolean @default(false) // si fue récord personal
-
+  isPR        Boolean @default(false)
   notes       String?
 
-  workout  Workout  @relation(fields: [workoutId], references: [id], onDelete: Cascade)
-  exercise Exercise @relation(fields: [exerciseId], references: [id])
+  workout        Workout         @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+  customExercise CustomExercise? @relation(fields: [customExerciseId], references: [id])
 
   createdAt DateTime @default(now())
 
@@ -200,32 +172,41 @@ model WorkoutSet {
 
 // ─── TIPO DE SET ──────────────────────────────────────
 enum SetType {
-  NORMAL      // Set normal
-  WARMUP      // Calentamiento (no cuenta para volumen)
-  DROPSET     // Drop set
-  SUPERSET    // Superserie
-  FAILURE     // Hasta el fallo
-  AMRAP       // As Many Reps As Possible
+  NORMAL
+  WARMUP
+  DROPSET
+  SUPERSET
+  FAILURE
+  AMRAP
 }
 
 // ─── RÉCORD PERSONAL ──────────────────────────────────
-// Guardamos el mejor set de cada ejercicio por usuario
+// Guardamos externalId + name como referencia.
+// NUNCA guardamos datos completos del ejercicio.
 model PersonalRecord {
-  id         String   @id @default(cuid())
+  id         String @id @default(cuid())
   userId     String
-  exerciseId String
+
+  // Referencia al ejercicio
+  externalId       String?  // ID de ExerciseDB
+  exerciseName     String   // nombre del ejercicio
+  customExerciseId String?  // si es ejercicio custom
+
   weight     Float?
   reps       Int?
-  volume     Float?   // peso * reps
-  oneRepMax  Float?   // 1RM estimado
+  volume     Float?  // peso * reps
+  oneRepMax  Float?  // 1RM estimado
 
-  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  exercise Exercise @relation(fields: [exerciseId], references: [id])
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  customExercise CustomExercise? @relation(fields: [customExerciseId], references: [id])
 
   achievedAt DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  @@unique([userId, exerciseId])
+  // Un PR por ejercicio por usuario
+  // La combinación externalId+userId o customExerciseId+userId es única
+  @@unique([userId, externalId])
+  @@unique([userId, customExerciseId])
   @@map("personal_records")
 }
 

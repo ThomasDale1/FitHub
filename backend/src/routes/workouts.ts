@@ -3,39 +3,13 @@ import { prisma } from "../lib/prisma.js"
 import { requireAuth } from "../middleware/auth.js"
 import { getAuth } from "@clerk/express"
 import {
-  calculateMuscleStimulus,
   calculate1RM,
   calculateWorkoutXP,
-  ExerciseInWorkout,
 } from "../lib/muscleStimulus.js"
 
 const router = Router()
-
-// ─── TIPOS LOCALES ────────────────────────────────────
-type WorkoutWithSets = {
-  id: string
-  userId: string
-  startTime: Date
-  sets: {
-    exerciseId: string
-    order: number
-    weight: number | null
-    reps: number | null
-    isPR: boolean
-    exercise: {
-      muscleActivations: {
-        muscleName: string
-        activationPct: number
-        isPrimary: boolean
-      }[]
-    }
-  }[]
-}
-
-// Todas las rutas requieren autenticación
 router.use(requireAuth)
 
-// ─── HELPER: obtener userId de Prisma desde clerkId ───
 async function getPrismaUserId(clerkId: string): Promise<string | null> {
   const user = await prisma.user.findUnique({
     where: { clerkId },
@@ -45,12 +19,10 @@ async function getPrismaUserId(clerkId: string): Promise<string | null> {
 }
 
 // ─── GET /api/workouts ────────────────────────────────
-// Historial de workouts del usuario
 router.get("/", async (req: Request, res: Response) => {
   try {
     const { userId: clerkId } = getAuth(req)
     const userId = await getPrismaUserId(clerkId!)
-
     if (!userId) {
       res.status(404).json({ error: "Usuario no encontrado" })
       return
@@ -58,11 +30,7 @@ router.get("/", async (req: Request, res: Response) => {
 
     const workouts = await prisma.workout.findMany({
       where: { userId, isCompleted: true },
-      include: {
-        sets: {
-          include: { exercise: true },
-        },
-      },
+      include: { sets: true },
       orderBy: { startTime: "desc" },
       take: 20,
     })
@@ -74,7 +42,6 @@ router.get("/", async (req: Request, res: Response) => {
 })
 
 // ─── POST /api/workouts/start ─────────────────────────
-// Iniciar un nuevo workout
 router.post("/start", async (req: Request, res: Response) => {
   try {
     const { userId: clerkId } = getAuth(req)
@@ -96,7 +63,6 @@ router.post("/start", async (req: Request, res: Response) => {
       },
     })
 
-    // Si viene de plantilla, pre-cargar los ejercicios
     if (templateId) {
       await prisma.workoutTemplate.update({
         where: { id: templateId },
@@ -111,12 +77,13 @@ router.post("/start", async (req: Request, res: Response) => {
 })
 
 // ─── POST /api/workouts/:id/sets ──────────────────────
-// Agregar un set a un workout activo
 router.post("/:id/sets", async (req: Request, res: Response) => {
   try {
     const workoutId = req.params.id as string
     const {
-      exerciseId,
+      externalId,      // ID de ExerciseDB (si es de la API)
+      exerciseName,    // nombre del ejercicio (siempre requerido)
+      customExerciseId,// si es ejercicio custom del usuario
       order,
       setNumber,
       weight,
@@ -131,7 +98,6 @@ router.post("/:id/sets", async (req: Request, res: Response) => {
     const { userId: clerkId } = getAuth(req)
     const userId = await getPrismaUserId(clerkId!)
 
-    // Verificar que el workout pertenece al usuario
     const workout = await prisma.workout.findFirst({
       where: { id: workoutId, userId: userId! },
     })
@@ -141,19 +107,34 @@ router.post("/:id/sets", async (req: Request, res: Response) => {
       return
     }
 
-    // Buscar si es PR
-    const existingPR = await prisma.personalRecord.findUnique({
-      where: { userId_exerciseId: { userId: userId!, exerciseId } },
-    })
+    // Verificar si es PR
+    // Buscamos por externalId o customExerciseId
+    const existingPR = externalId
+      ? await prisma.personalRecord.findUnique({
+          where: { userId_externalId: { userId: userId!, externalId } },
+        })
+      : customExerciseId
+      ? await prisma.personalRecord.findUnique({
+          where: {
+            userId_customExerciseId: {
+              userId: userId!,
+              customExerciseId,
+            },
+          },
+        })
+      : null
 
     const currentVolume = weight && reps ? weight * reps : 0
     const isPR = !existingPR || currentVolume > (existingPR.volume ?? 0)
 
     // Crear el set
+    // Solo guardamos externalId + exerciseName, NUNCA datos completos
     const set = await prisma.workoutSet.create({
       data: {
         workoutId,
-        exerciseId,
+        externalId: externalId || null,
+        exerciseName,
+        customExerciseId: customExerciseId || null,
         order,
         setNumber,
         weight,
@@ -166,29 +147,43 @@ router.post("/:id/sets", async (req: Request, res: Response) => {
         isCompleted: true,
         isPR,
       },
-      include: { exercise: true },
     })
 
     // Actualizar PR si aplica
     if (isPR && weight && reps) {
-      await prisma.personalRecord.upsert({
-        where: { userId_exerciseId: { userId: userId!, exerciseId } },
-        update: {
-          weight,
-          reps,
-          volume: currentVolume,
-          oneRepMax: calculate1RM(weight, reps),
-          achievedAt: new Date(),
-        },
-        create: {
-          userId: userId!,
-          exerciseId,
-          weight,
-          reps,
-          volume: currentVolume,
-          oneRepMax: calculate1RM(weight, reps),
-        },
-      })
+      const prData = {
+        weight,
+        reps,
+        volume: currentVolume,
+        oneRepMax: calculate1RM(weight, reps),
+        exerciseName,
+        achievedAt: new Date(),
+      }
+
+      if (externalId) {
+        await prisma.personalRecord.upsert({
+          where: {
+            userId_externalId: { userId: userId!, externalId },
+          },
+          update: prData,
+          create: { userId: userId!, externalId, ...prData },
+        })
+      } else if (customExerciseId) {
+        await prisma.personalRecord.upsert({
+          where: {
+            userId_customExerciseId: {
+              userId: userId!,
+              customExerciseId,
+            },
+          },
+          update: prData,
+          create: {
+            userId: userId!,
+            customExerciseId,
+            ...prData,
+          },
+        })
+      }
     }
 
     res.json({ set, isPR })
@@ -198,7 +193,6 @@ router.post("/:id/sets", async (req: Request, res: Response) => {
 })
 
 // ─── POST /api/workouts/:id/finish ───────────────────
-// Finalizar un workout y calcular métricas
 router.post("/:id/finish", async (req: Request, res: Response) => {
   try {
     const workoutId = req.params.id as string
@@ -209,36 +203,30 @@ router.post("/:id/finish", async (req: Request, res: Response) => {
       where: { id: workoutId, userId: userId! },
       include: {
         sets: {
-          where: { isCompleted: true, setType: { not: "WARMUP" } },
-          include: {
-            exercise: {
-              include: { muscleActivations: true },
-            },
+          where: {
+            isCompleted: true,
+            setType: { not: "WARMUP" },
           },
         },
       },
-    }) as WorkoutWithSets | null
+    })
 
     if (!workout) {
       res.status(404).json({ error: "Workout no encontrado" })
       return
     }
 
-    // Calcular volumen total
     const totalVolume = workout.sets.reduce((sum, set) => {
       return sum + (set.weight ?? 0) * (set.reps ?? 0)
     }, 0)
 
-    // Calcular duración
     const endTime = new Date()
     const durationMinutes = Math.round(
       (endTime.getTime() - workout.startTime.getTime()) / 60000
     )
 
-    // Calcular PRs en este workout
     const newPRs = workout.sets.filter((s) => s.isPR).length
 
-    // Calcular XP
     const xpEarned = calculateWorkoutXP(
       totalVolume,
       workout.sets.length,
@@ -246,33 +234,6 @@ router.post("/:id/finish", async (req: Request, res: Response) => {
       durationMinutes
     )
 
-    // Calcular estímulo muscular
-    const exercisesForStimulus = Object.values(
-      workout.sets.reduce(
-        (acc, set) => {
-          const key = `${set.exerciseId}_${set.order}`
-          if (!acc[key]) {
-            acc[key] = {
-              exerciseId: set.exerciseId,
-              order: set.order,
-              setsCompleted: 0,
-              muscleActivations: set.exercise.muscleActivations.map((ma) => ({
-                muscleName: ma.muscleName,
-                activationPct: ma.activationPct,
-                isPrimary: ma.isPrimary,
-              })),
-            }
-          }
-          acc[key].setsCompleted++
-          return acc
-        },
-        {} as Record<string, ExerciseInWorkout>
-      )
-    )
-
-    const muscleStimulus = calculateMuscleStimulus(exercisesForStimulus)
-
-    // Actualizar workout
     const finishedWorkout = await prisma.workout.update({
       where: { id: workoutId },
       data: {
@@ -281,11 +242,9 @@ router.post("/:id/finish", async (req: Request, res: Response) => {
         totalVolume,
         xpEarned,
         isCompleted: true,
-        muscleStimulus: muscleStimulus as any,
       },
     })
 
-    // Actualizar XP del usuario
     await prisma.user.update({
       where: { id: userId! },
       data: {
@@ -299,7 +258,6 @@ router.post("/:id/finish", async (req: Request, res: Response) => {
       workout: finishedWorkout,
       xpEarned,
       newPRs,
-      muscleStimulus,
       totalVolume,
       durationMinutes,
     })
@@ -309,7 +267,6 @@ router.post("/:id/finish", async (req: Request, res: Response) => {
 })
 
 // ─── GET /api/workouts/templates ─────────────────────
-// Obtener plantillas del usuario
 router.get("/templates", async (req: Request, res: Response) => {
   try {
     const { userId: clerkId } = getAuth(req)
@@ -319,7 +276,6 @@ router.get("/templates", async (req: Request, res: Response) => {
       where: { userId: userId! },
       include: {
         templateSets: {
-          include: { exercise: true },
           orderBy: { order: "asc" },
         },
       },
@@ -333,7 +289,6 @@ router.get("/templates", async (req: Request, res: Response) => {
 })
 
 // ─── POST /api/workouts/templates ────────────────────
-// Crear una plantilla nueva
 router.post("/templates", async (req: Request, res: Response) => {
   try {
     const { userId: clerkId } = getAuth(req)
@@ -346,24 +301,20 @@ router.post("/templates", async (req: Request, res: Response) => {
         name,
         description,
         templateSets: {
-          create: exercises.map(
-            (ex: any, index: number) => ({
-              exerciseId: ex.exerciseId,
-              order: index + 1,
-              targetSets: ex.targetSets || 3,
-              targetReps: ex.targetReps || 10,
-              targetWeight: ex.targetWeight,
-              restSeconds: ex.restSeconds || 90,
-              notes: ex.notes,
-            })
-          ),
+          create: exercises.map((ex: any, index: number) => ({
+            externalId: ex.externalId || null,
+            exerciseName: ex.exerciseName,
+            customExerciseId: ex.customExerciseId || null,
+            order: index + 1,
+            targetSets: ex.targetSets || 3,
+            targetReps: ex.targetReps || 10,
+            targetWeight: ex.targetWeight,
+            restSeconds: ex.restSeconds || 90,
+            notes: ex.notes,
+          })),
         },
       },
-      include: {
-        templateSets: {
-          include: { exercise: true },
-        },
-      },
+      include: { templateSets: true },
     })
 
     res.json(template)
@@ -373,7 +324,6 @@ router.post("/templates", async (req: Request, res: Response) => {
 })
 
 // ─── GET /api/workouts/prs ────────────────────────────
-// Récords personales del usuario
 router.get("/prs", async (req: Request, res: Response) => {
   try {
     const { userId: clerkId } = getAuth(req)
@@ -381,7 +331,6 @@ router.get("/prs", async (req: Request, res: Response) => {
 
     const prs = await prisma.personalRecord.findMany({
       where: { userId: userId! },
-      include: { exercise: true },
       orderBy: { achievedAt: "desc" },
     })
 
