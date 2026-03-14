@@ -7,6 +7,7 @@ import morgan from "morgan";
 import { prisma } from "./lib/prisma.js";
 import { clerkAuth } from "./middleware/auth.js";
 import exercisesRouter from "./routes/exercise.js";
+import workoutsRouter from './routes/workouts.js'
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -45,6 +46,7 @@ app.get("/health", async (req, res) => {
 
 // API Routes
 app.use("/api/exercises", exercisesRouter);
+app.use('/api/workouts', workoutsRouter)
 
 // ─── INICIAR SERVIDOR ─────────────────────────────────
 app.listen(PORT, () => {

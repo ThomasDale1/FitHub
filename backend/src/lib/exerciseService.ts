@@ -14,6 +14,7 @@ export interface Exercise {
   bodyPart: string;
   target: string;
   equipment: string;
+  gifUrl: string
   instructions: string[];
   secondaryMuscles: string[];
   difficulty?: string;
