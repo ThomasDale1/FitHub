@@ -5,6 +5,7 @@ import {
   getExercisesByBodyPart,
   getBodyParts,
   getExerciseById,
+  getExerciseImage,
 } from "../lib/exerciseService.js";
 
 const router = Router();
@@ -63,6 +64,19 @@ router.get("/search", async (req: Request, res: Response) => {
     res.json(exercises);
   } catch (error) {
     res.status(500).json({ error: "Error al buscar ejercicios" });
+  }
+});
+
+// GET /api/exercises/:id/image
+router.get("/:id/image", async (req: Request, res: Response) => {
+  const id = req.params.id as string;
+  try {
+    const { data, contentType } = await getExerciseImage(id);
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    res.send(data);
+  } catch (error) {
+    res.status(404).json({ error: "Imagen no encontrada" });
   }
 });
 

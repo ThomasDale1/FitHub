@@ -14,9 +14,10 @@ export interface Exercise {
   bodyPart: string;
   target: string;
   equipment: string;
-  gifUrl: string;
   instructions: string[];
   secondaryMuscles: string[];
+  difficulty?: string;
+  category?: string;
 }
 
 // Obtener todos los ejercicios (con límite y offset)
@@ -59,6 +60,19 @@ export const getBodyParts = async (): Promise<string[]> => {
     headers,
   });
   return response.data;
+};
+
+// Obtener imagen de un ejercicio como buffer
+export const getExerciseImage = async (exerciseId: string): Promise<{ data: Buffer; contentType: string }> => {
+  const response = await axios.get(`${BASE_URL}/image`, {
+    headers,
+    params: { resolution: "large", exerciseId },
+    responseType: "arraybuffer",
+  });
+  return {
+    data: Buffer.from(response.data),
+    contentType: (response.headers["content-type"] as string) || "image/gif",
+  };
 };
 
 // Obtener un ejercicio por ID
