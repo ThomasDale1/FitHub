@@ -75,8 +75,10 @@ router.get("/:id/image", async (req: Request, res: Response) => {
     res.setHeader("Content-Type", contentType);
     res.setHeader("Cache-Control", "public, max-age=86400");
     res.send(data);
-  } catch (error) {
-    res.status(404).json({ error: "Imagen no encontrada" });
+  } catch (error: any) {
+    const status = error?.response?.status || 500;
+    const detail = error?.response?.data || error?.message || "Error desconocido";
+    res.status(status).json({ error: "Imagen no encontrada", detail });
   }
 });
 

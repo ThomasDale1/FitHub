@@ -66,7 +66,7 @@ export const getBodyParts = async (): Promise<string[]> => {
 export const getExerciseImage = async (exerciseId: string): Promise<{ data: Buffer; contentType: string }> => {
   const response = await axios.get(`${BASE_URL}/image`, {
     headers,
-    params: { resolution: "large", exerciseId },
+    params: { resolution: "180", exerciseId },
     responseType: "arraybuffer",
   });
   return {
