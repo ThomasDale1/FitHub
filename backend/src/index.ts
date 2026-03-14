@@ -1,10 +1,12 @@
-import 'dotenv/config';
+import "dotenv/config";
 
-import express from 'express';
-import cors from 'cors';
-import helmet from 'helmet';
-import morgan from 'morgan';
+import express from "express";
+import cors from "cors";
+import helmet from "helmet";
+import morgan from "morgan";
 import { prisma } from "./lib/prisma.js";
+import { clerkAuth } from "./middleware/auth.js";
+import exercisesRouter from "./routes/exercise.js";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -12,21 +14,20 @@ const PORT = process.env.PORT || 3000;
 // ─── MIDDLEWARES ───────────────────────────────────────
 app.use(helmet());
 app.use(cors());
-app.use(morgan('dev'));
+app.use(morgan("dev"));
 app.use(express.json());
+app.use(clerkAuth);
 
 // ─── RUTAS ────────────────────────────────────────────
-app.get('/', (req, res) => {
+app.get("/", (req, res) => {
   res.json({
-    message: '🚀 Fit Hub API funcionando correctamente',
-    version: '1.0.0',
+    message: "🚀 Fit Hub API funcionando correctamente",
+    version: "1.0.0",
   });
 });
 
-// Ruta de prueba para verificar la base de datos
 app.get("/health", async (req, res) => {
   try {
-    // Intentamos contar los usuarios en la DB
     const userCount = await prisma.user.count();
     res.json({
       status: "✅ OK",
@@ -41,6 +42,9 @@ app.get("/health", async (req, res) => {
     });
   }
 });
+
+// API Routes
+app.use("/api/exercises", exercisesRouter);
 
 // ─── INICIAR SERVIDOR ─────────────────────────────────
 app.listen(PORT, () => {
