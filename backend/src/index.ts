@@ -9,6 +9,8 @@ import { clerkAuth } from "./middleware/auth.js";
 import exercisesRouter from "./routes/exercise.js";
 import workoutsRouter from './routes/workouts.js'
 import webhooksRouter from './routes/webhooks.js'
+import usersRouter from "./routes/users.js"; // ← NUEVO Sprint 2
+
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -62,6 +64,7 @@ app.get("/health", async (req, res) => {
 });
 
 // API Routes
+app.use("/api/users", usersRouter);
 app.use("/api/exercises", exercisesRouter);
 app.use('/api/workouts', workoutsRouter)
 

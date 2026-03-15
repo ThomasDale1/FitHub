@@ -1,9 +1,15 @@
+// ─────────────────────────────────────────────────────
+// mobile/app/(tabs)/index.tsx
+// Sprint 2: Dashboard conectado a datos reales
+// Fallback a mock data si el backend no responde
+// ─────────────────────────────────────────────────────
 import {
   View,
   Text,
   ScrollView,
   TouchableOpacity,
   RefreshControl,
+  ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useUser } from "@clerk/clerk-expo";
@@ -14,56 +20,48 @@ import StatCard from "@/components/StatCard";
 import StreakBadge from "@/components/StreakBadge";
 import XPBar from "@/components/XPBar";
 import WorkoutCard from "@/components/WorkoutCard";
+import { useDashboard } from "@/hooks/useUserData";
 
-// Datos de ejemplo por ahora
-// Los reemplazaremos con datos reales del backend
-const MOCK_DATA = {
-  streak: 7,
-  xp: 340,
-  level: 3,
-  maxXP: 500,
-  steps: 8420,
-  calories: 2150,
-  workoutsThisWeek: 4,
-  recentWorkouts: [
-    {
-      id: "1",
-      name: "Pecho y Tríceps",
-      date: "Hoy",
-      duration: 65,
-      xpEarned: 80,
-      setsCount: 18,
-    },
-    {
-      id: "2",
-      name: "Espalda y Bíceps",
-      date: "Ayer",
-      duration: 55,
-      xpEarned: 70,
-      setsCount: 15,
-    },
-    {
-      id: "3",
-      name: "Piernas",
-      date: "Hace 2 días",
-      duration: 70,
-      xpEarned: 90,
-      setsCount: 20,
-    },
-  ],
+// Fallback para cuando el backend no responde
+const FALLBACK_DATA = {
+  user: {
+    name: "Atleta",
+    avatarUrl: null,
+    xp: 0,
+    level: 1,
+    currentXP: 0,
+    maxXP: 500,
+    streak: 0,
+  },
+  weekStats: {
+    workouts: 0,
+    calories: 0,
+    volume: 0,
+    minutes: 0,
+  },
+  recentWorkouts: [],
+  activeGoals: [],
 };
 
 export default function DashboardScreen() {
-  const { user } = useUser();
+  const { user: clerkUser } = useUser();
+  const { data, loading, error, refetch } = useDashboard();
   const [refreshing, setRefreshing] = useState(false);
 
-  const firstName = user?.firstName || user?.emailAddresses[0]?.emailAddress?.split("@")[0] || "Atleta";
+  // Usar datos reales o fallback
+  const dashData = data || FALLBACK_DATA;
 
-  const onRefresh = useCallback(() => {
+  const firstName =
+    data?.user.name?.split(" ")[0] ||
+    clerkUser?.firstName ||
+    clerkUser?.emailAddresses[0]?.emailAddress?.split("@")[0] ||
+    "Atleta";
+
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    // Aquí llamaremos al backend cuando lo conectemos
-    setTimeout(() => setRefreshing(false), 1000);
-  }, []);
+    await refetch();
+    setRefreshing(false);
+  }, [refetch]);
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -85,7 +83,6 @@ export default function DashboardScreen() {
         }
       >
         <View className="px-5 pt-4 pb-8">
-
           {/* ─── HEADER ─────────────────────────────── */}
           <View className="flex-row justify-between items-center mb-6">
             <View>
@@ -100,62 +97,100 @@ export default function DashboardScreen() {
               className="bg-background-card border border-background-elevated rounded-2xl p-3"
               onPress={() => router.push("/(tabs)/profile")}
             >
-              <Ionicons name="notifications-outline" size={22} color="#A0A0B0" />
+              <Ionicons
+                name="notifications-outline"
+                size={22}
+                color="#A0A0B0"
+              />
             </TouchableOpacity>
           </View>
 
+          {/* ─── LOADING STATE ──────────────────────── */}
+          {loading && !data && (
+            <ActivityIndicator
+              color="#6C63FF"
+              size="large"
+              className="py-12"
+            />
+          )}
+
+          {/* ─── ERROR BANNER (sutil) ───────────────── */}
+          {error && !data && (
+            <TouchableOpacity
+              className="bg-background-card border border-streak/20 rounded-2xl p-3 mb-4 flex-row items-center gap-x-2"
+              onPress={refetch}
+            >
+              <Ionicons
+                name="cloud-offline-outline"
+                size={18}
+                color="#FF6B35"
+              />
+              <Text className="text-text-secondary text-sm flex-1">
+                Sin conexión al servidor
+              </Text>
+              <Text className="text-primary text-sm font-bold">
+                Reintentar
+              </Text>
+            </TouchableOpacity>
+          )}
+
           {/* ─── STREAK ─────────────────────────────── */}
-          <StreakBadge streak={MOCK_DATA.streak} />
+          <StreakBadge streak={dashData.user.streak} />
 
           {/* ─── XP BAR ─────────────────────────────── */}
           <View className="mt-4">
             <XPBar
-              currentXP={MOCK_DATA.xp}
-              maxXP={MOCK_DATA.maxXP}
-              level={MOCK_DATA.level}
+              currentXP={dashData.user.currentXP}
+              maxXP={dashData.user.maxXP}
+              level={dashData.user.level}
             />
           </View>
 
           {/* ─── STATS GRID ─────────────────────────── */}
           <Text className="text-white font-bold text-lg mt-6 mb-3">
-            Hoy
+            Esta semana
           </Text>
 
-          {/* Fila 1 — ancho completo */}
+          {/* Fila 1 */}
           <View className="flex-row gap-x-3 mb-3">
             <StatCard
-              icon="footsteps"
-              label="Pasos"
-              value={MOCK_DATA.steps.toLocaleString()}
-              subtitle="Meta: 10,000"
+              icon="barbell"
+              label="Workouts"
+              value={String(dashData.weekStats.workouts)}
+              unit="esta semana"
+              subtitle="Meta: 5"
               gradient={["#6C63FF", "#9B8FFF"]}
             />
             <StatCard
               icon="flame"
               label="Calorías"
-              value={MOCK_DATA.calories.toLocaleString()}
+              value={dashData.weekStats.calories.toLocaleString()}
               unit="kcal"
-              subtitle="Meta: 2,500"
+              subtitle="Estimado"
               gradient={["#FF6B35", "#FF9A6C"]}
             />
           </View>
 
-          {/* Fila 2 — ancho completo */}
+          {/* Fila 2 */}
           <View className="flex-row gap-x-3">
             <StatCard
-              icon="barbell"
-              label="Workouts"
-              value={String(MOCK_DATA.workoutsThisWeek)}
-              unit="esta semana"
-              subtitle="Meta: 5"
+              icon="fitness"
+              label="Volumen"
+              value={
+                dashData.weekStats.volume >= 1000
+                  ? `${(dashData.weekStats.volume / 1000).toFixed(1)}t`
+                  : String(dashData.weekStats.volume)
+              }
+              unit={dashData.weekStats.volume >= 1000 ? "" : "kg"}
+              subtitle="Total semanal"
               gradient={["#00D48A", "#00B876"]}
             />
             <StatCard
               icon="star"
               label="XP Total"
-              value={String(MOCK_DATA.xp)}
+              value={dashData.user.xp.toLocaleString()}
               unit="xp"
-              subtitle={`Nivel ${MOCK_DATA.level}`}
+              subtitle={`Nivel ${dashData.user.level}`}
               gradient={["#F59E0B", "#EF8C00"]}
             />
           </View>
@@ -176,26 +211,84 @@ export default function DashboardScreen() {
             <Text className="text-white font-bold text-lg">
               Workouts recientes
             </Text>
-            <TouchableOpacity onPress={() => router.push("/(tabs)/workout")}>
+            <TouchableOpacity
+              onPress={() => router.push("/(tabs)/workout")}
+            >
               <Text className="text-primary text-sm font-bold">
                 Ver todos
               </Text>
             </TouchableOpacity>
           </View>
 
-          {MOCK_DATA.recentWorkouts.map((workout) => (
-            <WorkoutCard
-              key={workout.id}
-              name={workout.name}
-              date={workout.date}
-              duration={workout.duration}
-              xpEarned={workout.xpEarned}
-              setsCount={workout.setsCount}
-            />
-          ))}
+          {dashData.recentWorkouts.length === 0 ? (
+            <View className="bg-background-card border border-background-elevated rounded-3xl p-6 items-center">
+              <Text className="text-4xl mb-2">🏋️</Text>
+              <Text className="text-text-secondary text-sm text-center">
+                Aún no tienes workouts registrados.{"\n"}
+                ¡Empieza tu primer entrenamiento!
+              </Text>
+            </View>
+          ) : (
+            dashData.recentWorkouts.map((workout) => (
+              <WorkoutCard
+                key={workout.id}
+                name={workout.name}
+                date={workout.date}
+                duration={workout.duration}
+                xpEarned={workout.xpEarned}
+                setsCount={workout.setsCount}
+              />
+            ))
+          )}
+
+          {/* ─── ACTIVE GOALS ───────────────────────── */}
+          {dashData.activeGoals.length > 0 && (
+            <>
+              <Text className="text-white font-bold text-lg mt-6 mb-3">
+                Metas activas
+              </Text>
+              {dashData.activeGoals.map((goal) => {
+                const progress =
+                  goal.targetValue && goal.currentValue
+                    ? Math.min(
+                        (goal.currentValue / goal.targetValue) * 100,
+                        100
+                      )
+                    : 0;
+                return (
+                  <View
+                    key={goal.id}
+                    className="bg-background-card border border-background-elevated rounded-3xl p-4 mb-2"
+                  >
+                    <View className="flex-row justify-between items-center mb-2">
+                      <Text className="text-white font-bold text-sm">
+                        {goal.title}
+                      </Text>
+                      <Text className="text-primary text-xs font-bold">
+                        {Math.round(progress)}%
+                      </Text>
+                    </View>
+                    {/* Progress bar */}
+                    <View className="bg-background-elevated rounded-full h-2">
+                      <View
+                        className="bg-primary rounded-full h-2"
+                        style={{ width: `${progress}%` }}
+                      />
+                    </View>
+                    {goal.targetValue && (
+                      <Text className="text-text-muted text-xs mt-1">
+                        {goal.currentValue ?? 0} / {goal.targetValue}{" "}
+                        {goal.unit}
+                      </Text>
+                    )}
+                  </View>
+                );
+              })}
+            </>
+          )}
 
           {/* ─── AI COACH BANNER ─────────────────────── */}
-          <TouchableOpacity className="bg-background-card border border-primary/30 rounded-3xl p-4 mt-3 flex-row items-center gap-x-4">
+          <TouchableOpacity className="bg-background-card border border-primary/30 rounded-3xl p-4 mt-4 flex-row items-center gap-x-4">
             <View className="bg-primary/20 rounded-2xl p-3">
               <Ionicons name="sparkles" size={24} color="#6C63FF" />
             </View>
@@ -207,9 +300,12 @@ export default function DashboardScreen() {
                 Pregúntale a tu coach personalizado
               </Text>
             </View>
-            <Ionicons name="chevron-forward" size={20} color="#6B6B80" />
+            <Ionicons
+              name="chevron-forward"
+              size={20}
+              color="#6B6B80"
+            />
           </TouchableOpacity>
-
         </View>
       </ScrollView>
     </SafeAreaView>
