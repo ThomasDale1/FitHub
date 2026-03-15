@@ -288,7 +288,7 @@ export default function DashboardScreen() {
           )}
 
           {/* ─── AI COACH BANNER ─────────────────────── */}
-          <TouchableOpacity className="bg-background-card border border-primary/30 rounded-3xl p-4 mt-4 flex-row items-center gap-x-4">
+          <TouchableOpacity className="bg-background-card border border-primary/30 rounded-3xl p-4 mt-4 flex-row items-center gap-x-4" onPress={() => router.push('/ai/coach')}>
             <View className="bg-primary/20 rounded-2xl p-3">
               <Ionicons name="sparkles" size={24} color="#6C63FF" />
             </View>

@@ -10,6 +10,8 @@ import exercisesRouter from "./routes/exercise.js";
 import workoutsRouter from './routes/workouts.js'
 import webhooksRouter from './routes/webhooks.js'
 import usersRouter from "./routes/users.js"; // ← NUEVO Sprint 2
+import nutritionRouter from "./routes/nutrition.js";  // ← NUEVO Sprint 3
+import aiRouter from "./routes/ai.js";                // ← NUEVO Sprint 3
 
 
 const app = express();
@@ -64,6 +66,8 @@ app.get("/health", async (req, res) => {
 });
 
 // API Routes
+app.use("/api/nutrition", nutritionRouter);
+app.use("/api/ai", aiRouter); 
 app.use("/api/users", usersRouter);
 app.use("/api/exercises", exercisesRouter);
 app.use('/api/workouts', workoutsRouter)

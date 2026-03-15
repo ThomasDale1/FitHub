@@ -19,6 +19,11 @@ model User {
   weight      Float?
   height      Float?
   bodyFat     Float?
+  calorieGoal    Int?
+  proteinGoal    Float?
+  carbsGoal      Float?
+  fatGoal        Float?
+  activityLevel  String?
   xp          Int       @default(0)
   level       Int       @default(1)
   streak      Int       @default(0)
@@ -28,6 +33,9 @@ model User {
 
   workouts         Workout[]
   goals            Goal[]
+  foodLogs         FoodLog[]
+  savedFoods       SavedFood[]
+  aiChatMessages   AiChatMessage[]
   workoutTemplates WorkoutTemplate[]
   customExercises  CustomExercise[]
   personalRecords  PersonalRecord[]
@@ -180,6 +188,21 @@ enum SetType {
   AMRAP
 }
 
+enum MealType {
+  BREAKFAST
+  LUNCH
+  DINNER
+  SNACK
+}
+
+enum FoodSource {
+  MANUAL
+  BARCODE
+  AI_PHOTO
+  SEARCH
+  SAVED
+}
+
 // ─── RÉCORD PERSONAL ──────────────────────────────────
 // Guardamos externalId + name como referencia.
 // NUNCA guardamos datos completos del ejercicio.
@@ -226,4 +249,108 @@ model Goal {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("goals")
+}
+
+// ─── FOOD LOG (Registro diario) ───────────────────────
+model FoodLog {
+  id        String   @id @default(cuid())
+  userId    String
+  date      DateTime @db.Date
+
+  totalCalories  Int     @default(0)
+  totalProtein   Float   @default(0)
+  totalCarbs     Float   @default(0)
+  totalFat       Float   @default(0)
+  totalFiber     Float   @default(0)
+
+  calorieGoal    Int     @default(2000)
+  proteinGoal    Float   @default(150)
+  carbsGoal      Float   @default(250)
+  fatGoal        Float   @default(65)
+  waterMl        Int     @default(0)
+  waterGoalMl    Int     @default(2500)
+
+  user    User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  entries FoodEntry[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, date])
+  @@map("food_logs")
+}
+
+// ─── FOOD ENTRY (Cada alimento) ───────────────────────
+model FoodEntry {
+  id         String   @id @default(cuid())
+  foodLogId  String
+  mealType   MealType
+
+  name       String
+  brand      String?
+  barcode    String?
+
+  servingSize    Float
+  servingUnit    String
+
+  calories   Int
+  protein    Float
+  carbs      Float
+  fat        Float
+  fiber      Float    @default(0)
+  sugar      Float    @default(0)
+  sodium     Float    @default(0)
+
+  source       FoodSource @default(MANUAL)
+  aiConfidence Float?
+  imageUrl     String?
+
+  foodLog  FoodLog  @relation(fields: [foodLogId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@map("food_entries")
+}
+
+// ─── SAVED FOODS (Favoritos) ──────────────────────────
+model SavedFood {
+  id       String  @id @default(cuid())
+  userId   String
+
+  name       String
+  brand      String?
+  barcode    String?
+
+  servingSize    Float
+  servingUnit    String
+  calories       Int
+  protein        Float
+  carbs          Float
+  fat            Float
+  fiber          Float   @default(0)
+
+  isFavorite Boolean  @default(false)
+  timesUsed  Int      @default(0)
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("saved_foods")
+}
+
+// ─── AI CHAT MESSAGES ─────────────────────────────────
+model AiChatMessage {
+  id        String   @id @default(cuid())
+  userId    String
+  role      String
+  content   String
+  metadata  Json?
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@map("ai_chat_messages")
 }

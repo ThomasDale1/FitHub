@@ -121,6 +121,58 @@ export interface Goal {
   isCompleted: boolean;
 }
 
+export interface FoodEntry {
+  id: string;
+  foodLogId: string;
+  mealType: "BREAKFAST" | "LUNCH" | "DINNER" | "SNACK";
+  name: string;
+  brand: string | null;
+  servingSize: number;
+  servingUnit: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  fiber: number;
+  source: string;
+  createdAt: string;
+}
+ 
+export interface FoodLogData {
+  id: string;
+  date: string;
+  totalCalories: number;
+  totalProtein: number;
+  totalCarbs: number;
+  totalFat: number;
+  totalFiber: number;
+  calorieGoal: number;
+  proteinGoal: number;
+  carbsGoal: number;
+  fatGoal: number;
+  waterMl: number;
+  waterGoalMl: number;
+  entries: FoodEntry[];
+  meals: {
+    BREAKFAST: FoodEntry[];
+    LUNCH: FoodEntry[];
+    DINNER: FoodEntry[];
+    SNACK: FoodEntry[];
+  };
+  macroPercentages?: {
+    protein: number;
+    carbs: number;
+    fat: number;
+  };
+}
+ 
+export interface AiMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  createdAt: string;
+}
+
 // ─── Exercise API ─────────────────────────────────────
 export const exerciseAPI = {
   getBodyParts: () => api.get<string[]>("/api/exercises/bodyparts"),
@@ -182,4 +234,69 @@ export const workoutAPI = {
     api.post("/api/workouts/templates", data),
 
   getPRs: () => api.get("/api/workouts/prs"),
+};
+
+export const nutritionAPI = {
+  // Log de hoy
+  getToday: () => api.get<FoodLogData>("/api/nutrition/today"),
+ 
+  // Log de un día específico
+  getByDate: (date: string) =>
+    api.get<FoodLogData>(`/api/nutrition/date/${date}`),
+ 
+  // Agregar alimento
+  addEntry: (data: {
+    mealType: string;
+    name: string;
+    brand?: string;
+    servingSize?: number;
+    servingUnit?: string;
+    calories: number;
+    protein?: number;
+    carbs?: number;
+    fat?: number;
+    fiber?: number;
+    source?: string;
+    date?: string;
+  }) => api.post("/api/nutrition/entry", data),
+ 
+  // Eliminar alimento
+  deleteEntry: (id: string) => api.delete(`/api/nutrition/entry/${id}`),
+ 
+  // Agregar agua
+  addWater: (amount: number) =>
+    api.post("/api/nutrition/water", { amount }),
+ 
+  // Actualizar metas
+  updateGoals: (data: {
+    calorieGoal?: number;
+    proteinGoal?: number;
+    carbsGoal?: number;
+    fatGoal?: number;
+  }) => api.put("/api/nutrition/goals", data),
+ 
+  // Historial 7 días
+  getHistory: () => api.get("/api/nutrition/history"),
+ 
+  // Alimentos guardados
+  getSaved: () => api.get("/api/nutrition/saved"),
+  saveFavorite: (data: any) => api.post("/api/nutrition/saved", data),
+};
+ 
+// ─── AI Coach API (Sprint 3B) ─────────────────────────
+export const aiAPI = {
+  // Enviar mensaje
+  chat: (message: string) =>
+    api.post<{ message: string; xpEarned: number }>("/api/ai/chat", { message }),
+ 
+  // Historial
+  getHistory: () =>
+    api.get<{ messages: AiMessage[] }>("/api/ai/history"),
+ 
+  // Borrar historial
+  clearHistory: () => api.delete("/api/ai/history"),
+ 
+  // Respuestas rápidas
+  quick: (type: "workout_suggestion" | "nutrition_tip" | "motivation" | "recovery") =>
+    api.post<{ message: string; xpEarned: number; type: string }>("/api/ai/quick", { type }),
 };
