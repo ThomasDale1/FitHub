@@ -8,9 +8,26 @@ import { prisma } from "./lib/prisma.js";
 import { clerkAuth } from "./middleware/auth.js";
 import exercisesRouter from "./routes/exercise.js";
 import workoutsRouter from './routes/workouts.js'
+import webhooksRouter from './routes/webhooks.js'
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// ─── WEBHOOK ROUTE ─────────────────────────────────────
+// DEBE ir antes de express.json()
+// porque necesita el body en formato raw
+app.use(
+  "/api/webhooks",
+  express.raw({ type: "application/json" }),
+  (req, res, next) => {
+    // Convertir raw buffer a objeto para nuestro router
+    if (req.body && Buffer.isBuffer(req.body)) {
+      req.body = JSON.parse(req.body.toString());
+    }
+    next();
+  },
+  webhooksRouter
+);
 
 // ─── MIDDLEWARES ───────────────────────────────────────
 app.use(helmet());
