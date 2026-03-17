@@ -53,6 +53,8 @@ model User {
   userBadges               UserBadge[]
   notifications            Notification[]           @relation("UserNotifications")
 
+  dailySteps               DailySteps[]
+
   @@map("users")
 }
 
@@ -577,4 +579,28 @@ model Notification {
   createdAt DateTime @default(now())
 
   @@map("notifications")
+}
+
+// ─── DAILY STEPS ──────────────────────────────────────
+model DailySteps {
+  id        String   @id @default(cuid())
+  userId    String
+  date      DateTime @db.Date
+
+  steps         Int      @default(0)
+  goal          Int      @default(8500)
+  calories      Float    @default(0)
+  distanceKm    Float    @default(0)
+  activeMinutes Int      @default(0)
+  floors        Int      @default(0)
+
+  hourlySteps   Json?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, date])
+  @@map("daily_steps")
 }

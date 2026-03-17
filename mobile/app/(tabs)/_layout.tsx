@@ -3,13 +3,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 type IoniconsName = React.ComponentProps<typeof Ionicons>["name"];
 
-interface TabIconProps {
-  name: IoniconsName;
-  color: string;
-  size: number;
-}
-
-function TabIcon({ name, color, size }: TabIconProps) {
+function TabIcon({ name, color, size }: { name: IoniconsName; color: string; size: number }) {
   return <Ionicons name={name} size={size} color={color} />;
 }
 
@@ -53,11 +47,11 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="nutrition"
+        name="steps"
         options={{
-          title: "Nutrición",
+          title: "Pasos",
           tabBarIcon: ({ color, size }) => (
-            <TabIcon name="nutrition" color={color} size={size} />
+            <TabIcon name="footsteps" color={color} size={size} />
           ),
         }}
       />
@@ -77,6 +71,13 @@ export default function TabsLayout() {
           tabBarIcon: ({ color, size }) => (
             <TabIcon name="person" color={color} size={size} />
           ),
+        }}
+      />
+      {/* Nutrición se oculta del tab bar pero sigue accesible por ruta */}
+      <Tabs.Screen
+        name="nutrition"
+        options={{
+          href: null, // oculta del tab bar
         }}
       />
     </Tabs>

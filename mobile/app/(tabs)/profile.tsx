@@ -347,7 +347,7 @@ export default function ProfileScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 className="bg-background-card border border-background-elevated rounded-2xl p-3"
-                onPress={() => router.push("/settings/index")}
+                onPress={() => router.push("/settings")}
               >
                 <Ionicons
                   name="settings-outline"

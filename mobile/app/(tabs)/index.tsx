@@ -1,7 +1,6 @@
 // ─────────────────────────────────────────────────────
 // mobile/app/(tabs)/index.tsx
-// Sprint 2: Dashboard conectado a datos reales
-// Fallback a mock data si el backend no responde
+// Dashboard con datos reales + quick access Nutrición/Pasos
 // ─────────────────────────────────────────────────────
 import {
   View,
@@ -46,9 +45,9 @@ const FALLBACK_DATA = {
 
 export default function DashboardScreen() {
   const { user: clerkUser } = useUser();
+  const { getToken } = useAuth();
   const { data, loading, error, refetch } = useDashboard();
   const [refreshing, setRefreshing] = useState(false);
-  const { getToken } = useAuth();
   const [unreadCount, setUnreadCount] = useState(0);
 
   // Fetch unread notifications
@@ -111,7 +110,7 @@ export default function DashboardScreen() {
             </View>
             <TouchableOpacity
               className="bg-background-card border border-background-elevated rounded-2xl p-3"
-              onPress={() => router.push("/notifications/index")}
+              onPress={() => router.push("/notifications")}
             >
               <Ionicons
                 name="notifications-outline"
@@ -229,6 +228,24 @@ export default function DashboardScreen() {
             </Text>
           </TouchableOpacity>
 
+          {/* ─── QUICK ACCESS ───────────────────────── */}
+          <View className="flex-row gap-x-3 mt-3">
+            <TouchableOpacity
+              className="flex-1 bg-background-card border border-background-elevated rounded-3xl py-3 flex-row items-center justify-center gap-x-2"
+              onPress={() => router.push("/(tabs)/nutrition")}
+            >
+              <Ionicons name="nutrition" size={18} color="#00D48A" />
+              <Text className="text-white font-bold text-sm">Nutrición</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              className="flex-1 bg-background-card border border-background-elevated rounded-3xl py-3 flex-row items-center justify-center gap-x-2"
+              onPress={() => router.push("/(tabs)/steps")}
+            >
+              <Ionicons name="footsteps" size={18} color="#00BFFF" />
+              <Text className="text-white font-bold text-sm">Pasos</Text>
+            </TouchableOpacity>
+          </View>
+
           {/* ─── WORKOUTS RECIENTES ──────────────────── */}
           <View className="flex-row justify-between items-center mt-6 mb-3">
             <Text className="text-white font-bold text-lg">
@@ -311,7 +328,10 @@ export default function DashboardScreen() {
           )}
 
           {/* ─── AI COACH BANNER ─────────────────────── */}
-          <TouchableOpacity className="bg-background-card border border-primary/30 rounded-3xl p-4 mt-4 flex-row items-center gap-x-4" onPress={() => router.push('/ai/coach')}>
+          <TouchableOpacity
+            className="bg-background-card border border-primary/30 rounded-3xl p-4 mt-4 flex-row items-center gap-x-4"
+            onPress={() => router.push("/ai/coach")}
+          >
             <View className="bg-primary/20 rounded-2xl p-3">
               <Ionicons name="sparkles" size={24} color="#6C63FF" />
             </View>

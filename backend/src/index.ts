@@ -15,6 +15,7 @@ import aiRouter from "./routes/ai.js";                // ← NUEVO Sprint 3
 import socialRouter from "./routes/social.js";       // ← Sprint 4
 import challengesRouter from "./routes/challenges.js"; 
 import badgesRouter from "./routes/badges.js";
+import stepsRouter from './routes/steps.js'
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -75,7 +76,8 @@ app.use("/api/exercises", exercisesRouter);
 app.use('/api/workouts', workoutsRouter)
 app.use("/api/social", socialRouter);         
 app.use("/api/challenges", challengesRouter); 
-app.use("/api/badges", badgesRouter);         
+app.use("/api/badges", badgesRouter);
+app.use("/api/steps", stepsRouter)       
 
 // ─── INICIAR SERVIDOR ─────────────────────────────────
 app.listen(PORT, () => {

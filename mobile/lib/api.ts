@@ -254,6 +254,32 @@ export interface UserSuggestion {
   _count: { workouts: number };
 }
 
+// ─── Types: Steps ─────────────────────────────────────
+export interface DailyStepsData {
+  id: string;
+  steps: number;
+  goal: number;
+  calories: number;
+  distanceKm: number;
+  activeMinutes: number;
+  floors: number;
+  hourlySteps: number[] | null;
+  goalPercentage: number;
+  goalReached: boolean;
+}
+
+export interface WeekDayData {
+  date: string;
+  dayLabel: string;
+  steps: number;
+  goal: number;
+  calories: number;
+  distanceKm: number;
+  activeMinutes: number;
+  goalReached: boolean;
+  isToday: boolean;
+}
+
 // ─── Exercise API ─────────────────────────────────────
 export const exerciseAPI = {
   getBodyParts: () => api.get<string[]>("/api/exercises/bodyparts"),
@@ -437,4 +463,21 @@ export const badgesAPI = {
   getAll: () => api.get("/api/badges"),
   check: () => api.post("/api/badges/check"),
   seed: () => api.post("/api/badges/seed"),
+};
+
+// ─── Steps API ────────────────────────────────────────
+export const stepsAPI = {
+  syncSteps: (steps: number, hourlySteps?: number[]) =>
+    api.post("/api/steps/sync", { steps, hourlySteps }),
+
+  getToday: () => api.get<DailyStepsData>("/api/steps/today"),
+
+  getWeek: () =>
+    api.get<{ days: WeekDayData[]; weekTotal: any; avgSteps: number }>("/api/steps/week"),
+
+  getMonth: (year?: number, month?: number) =>
+    api.get(`/api/steps/month${year ? `?year=${year}&month=${month}` : ""}`),
+
+  updateGoal: (goal: number) =>
+    api.put("/api/steps/goal", { goal }),
 };
