@@ -253,6 +253,86 @@ router.post("/:id/finish", async (req: Request, res: Response) => {
         streak: { increment: 1 },
       },
     })
+    try {
+      const exerciseNames = [...new Set(
+        workout.sets.map((s) => s.exerciseName)
+      )]
+
+      await prisma.post.create({
+        data: {
+          userId: userId!,
+          content: `Completé ${workout.name} 💪 — ${durationMinutes} min, ${Math.round(totalVolume)} kg de volumen${newPRs > 0 ? `, ${newPRs} nuevo${newPRs > 1 ? "s" : ""} PR 🏆` : ""}`,
+          postType: newPRs > 0 ? "PR_SHARE" : "WORKOUT_SHARE",
+          workoutId: workoutId,
+          workoutData: {
+            name: workout.name,
+            duration: durationMinutes,
+            totalVolume: Math.round(totalVolume),
+            xpEarned,
+            setsCount: workout.sets.length,
+            exercises: exerciseNames.slice(0, 5),
+            newPRs,
+          },
+          isPublic: true,
+        },
+      })
+    } catch (autoShareErr) {
+      // No falla el workout si el auto-share falla
+      console.error("Auto-share error (non-blocking):", autoShareErr)
+    }
+
+    // ─── CHECK BADGES después de cada workout ──────
+    // (non-blocking, no falla el workout)
+    try {
+      // Importar la lógica inline para no crear dependencia circular
+      const totalWorkouts = await prisma.workout.count({
+        where: { userId: userId!, isCompleted: true },
+      })
+      const volumeAgg = await prisma.workout.aggregate({
+        where: { userId: userId!, isCompleted: true },
+        _sum: { totalVolume: true },
+      })
+      const totalPRs = await prisma.personalRecord.count({
+        where: { userId: userId! },
+      })
+      const userUpdated = await prisma.user.findUnique({
+        where: { id: userId! },
+        select: { xp: true, streak: true },
+      })
+
+      // Check milestones y crear notificaciones
+      const milestones = [
+        { count: 1, msg: "¡Primer workout completado! 🎉" },
+        { count: 10, msg: "¡10 workouts completados! 💪" },
+        { count: 25, msg: "¡25 workouts! Vas en serio 🔥" },
+        { count: 50, msg: "¡50 workouts! Eres una máquina ⚡" },
+        { count: 100, msg: "¡100 workouts! Centurión 🌟" },
+      ]
+
+      for (const m of milestones) {
+        if (totalWorkouts === m.count) {
+          await prisma.notification.create({
+            data: {
+              userId: userId!,
+              type: "milestone",
+              title: m.msg,
+              data: { workouts: totalWorkouts },
+            },
+          })
+          // Milestone post
+          await prisma.post.create({
+            data: {
+              userId: userId!,
+              content: m.msg,
+              postType: "MILESTONE",
+              isPublic: true,
+            },
+          })
+        }
+      }
+    } catch (badgeErr) {
+      console.error("Badge check error (non-blocking):", badgeErr)
+    }
 
     res.json({
       workout: finishedWorkout,

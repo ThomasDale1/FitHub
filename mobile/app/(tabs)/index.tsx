@@ -12,15 +12,16 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useUser } from "@clerk/clerk-expo";
+import { useUser, useAuth } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { router } from "expo-router";
 import StatCard from "@/components/StatCard";
 import StreakBadge from "@/components/StreakBadge";
 import XPBar from "@/components/XPBar";
 import WorkoutCard from "@/components/WorkoutCard";
 import { useDashboard } from "@/hooks/useUserData";
+import { socialAPI, setAuthToken } from "@/lib/api";
 
 // Fallback para cuando el backend no responde
 const FALLBACK_DATA = {
@@ -47,6 +48,21 @@ export default function DashboardScreen() {
   const { user: clerkUser } = useUser();
   const { data, loading, error, refetch } = useDashboard();
   const [refreshing, setRefreshing] = useState(false);
+  const { getToken } = useAuth();
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  // Fetch unread notifications
+  useEffect(() => {
+    const fetchUnread = async () => {
+      try {
+        const token = await getToken();
+        setAuthToken(token);
+        const res = await socialAPI.getNotifications();
+        setUnreadCount(res.data.unreadCount || 0);
+      } catch {}
+    };
+    fetchUnread();
+  }, [getToken]);
 
   // Usar datos reales o fallback
   const dashData = data || FALLBACK_DATA;
@@ -95,13 +111,20 @@ export default function DashboardScreen() {
             </View>
             <TouchableOpacity
               className="bg-background-card border border-background-elevated rounded-2xl p-3"
-              onPress={() => router.push("/(tabs)/profile")}
+              onPress={() => router.push("/notifications/index")}
             >
               <Ionicons
                 name="notifications-outline"
                 size={22}
                 color="#A0A0B0"
               />
+              {unreadCount > 0 && (
+                <View className="absolute -top-1 -right-1 bg-red-500 rounded-full w-5 h-5 items-center justify-center">
+                  <Text className="text-white text-xs font-bold">
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </Text>
+                </View>
+              )}
             </TouchableOpacity>
           </View>
 

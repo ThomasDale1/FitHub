@@ -48,6 +48,11 @@ export interface UserProfile {
   weight: number | null;
   height: number | null;
   bodyFat: number | null;
+  calorieGoal: number | null;
+  proteinGoal: number | null;
+  carbsGoal: number | null;
+  fatGoal: number | null;
+  activityLevel: string | null;
   xp: number;
   level: number;
   currentXP: number;
