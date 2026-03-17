@@ -12,7 +12,9 @@ import webhooksRouter from './routes/webhooks.js'
 import usersRouter from "./routes/users.js"; // ← NUEVO Sprint 2
 import nutritionRouter from "./routes/nutrition.js";  // ← NUEVO Sprint 3
 import aiRouter from "./routes/ai.js";                // ← NUEVO Sprint 3
-
+import socialRouter from "./routes/social.js";       // ← Sprint 4
+import challengesRouter from "./routes/challenges.js"; 
+import badgesRouter from "./routes/badges.js";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -71,6 +73,9 @@ app.use("/api/ai", aiRouter);
 app.use("/api/users", usersRouter);
 app.use("/api/exercises", exercisesRouter);
 app.use('/api/workouts', workoutsRouter)
+app.use("/api/social", socialRouter);         
+app.use("/api/challenges", challengesRouter); 
+app.use("/api/badges", badgesRouter);         
 
 // ─── INICIAR SERVIDOR ─────────────────────────────────
 app.listen(PORT, () => {

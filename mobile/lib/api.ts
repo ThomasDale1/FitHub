@@ -173,6 +173,82 @@ export interface AiMessage {
   createdAt: string;
 }
 
+export interface SocialPost {
+  id: string;
+  userId: string;
+  content: string | null;
+  imageUrls: string[];
+  postType: string;
+  workoutData: any;
+  isPublic: boolean;
+  createdAt: string;
+  user: {
+    id: string;
+    name: string;
+    username: string;
+    avatarUrl: string | null;
+    level: number;
+  };
+  reactionsCount: number;
+  myReaction: string | null;
+  _count: { comments: number };
+}
+ 
+export interface SocialComment {
+  id: string;
+  content: string;
+  createdAt: string;
+  user: {
+    id: string;
+    name: string;
+    username: string;
+    avatarUrl: string | null;
+  };
+  replies?: SocialComment[];
+}
+ 
+export interface ChallengeData {
+  id: string;
+  title: string;
+  description: string | null;
+  type: string;
+  status: string;
+  targetValue: number | null;
+  targetUnit: string | null;
+  exerciseName: string | null;
+  startDate: string;
+  endDate: string;
+  xpReward: number;
+  creator: { id: string; name: string; username: string; avatarUrl: string | null };
+  participantsCount: number;
+  myProgress: { currentValue: number; isWinner: boolean; rank: number | null } | null;
+  isJoined: boolean;
+}
+ 
+export interface BadgeData {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  icon: string;
+  category: string;
+  xpReward: number;
+  earned: boolean;
+  earnedAt: string | null;
+}
+ 
+export interface UserSuggestion {
+  id: string;
+  name: string;
+  username: string;
+  avatarUrl: string | null;
+  xp: number;
+  level: number;
+  streak: number;
+  bio: string | null;
+  _count: { workouts: number };
+}
+
 // ─── Exercise API ─────────────────────────────────────
 export const exerciseAPI = {
   getBodyParts: () => api.get<string[]>("/api/exercises/bodyparts"),
@@ -299,4 +375,61 @@ export const aiAPI = {
   // Respuestas rápidas
   quick: (type: "workout_suggestion" | "nutrition_tip" | "motivation" | "recovery") =>
     api.post<{ message: string; xpEarned: number; type: string }>("/api/ai/quick", { type }),
+};
+
+export const socialAPI = {
+  // Feed
+  getFeed: (cursor?: string) =>
+    api.get(`/api/social/feed${cursor ? `?cursor=${cursor}` : ""}`),
+ 
+  // Posts
+  createPost: (data: { content?: string; imageUrls?: string[]; postType?: string; workoutData?: any }) =>
+    api.post("/api/social/posts", data),
+ 
+  // Reactions
+  react: (postId: string, type: string) =>
+    api.post("/api/social/react", { postId, type }),
+ 
+  // Comments
+  getComments: (postId: string) =>
+    api.get(`/api/social/comments/${postId}`),
+  addComment: (postId: string, content: string, parentId?: string) =>
+    api.post("/api/social/comments", { postId, content, parentId }),
+ 
+  // Follows
+  follow: (targetUserId: string) =>
+    api.post("/api/social/follow", { targetUserId }),
+  unfollow: (userId: string) =>
+    api.delete(`/api/social/follow/${userId}`),
+  getFollowers: () => api.get("/api/social/followers"),
+  getFollowing: () => api.get("/api/social/following"),
+ 
+  // Discover
+  discover: () => api.get("/api/social/discover"),
+ 
+  // Profile
+  getProfile: (userId: string) =>
+    api.get(`/api/social/profile/${userId}`),
+ 
+  // Notifications
+  getNotifications: () => api.get("/api/social/notifications"),
+  markNotificationsRead: () => api.put("/api/social/notifications/read"),
+};
+ 
+// ─── Challenges API (Sprint 4) ────────────────────────
+export const challengesAPI = {
+  getAll: (filter?: string) =>
+    api.get(`/api/challenges${filter ? `?filter=${filter}` : ""}`),
+  getById: (id: string) => api.get(`/api/challenges/${id}`),
+  create: (data: any) => api.post("/api/challenges", data),
+  join: (id: string) => api.post(`/api/challenges/${id}/join`),
+  getLeaderboard: (period?: string) =>
+    api.get(`/api/challenges/leaderboard/global${period ? `?period=${period}` : ""}`),
+};
+ 
+// ─── Badges API (Sprint 4) ───────────────────────────
+export const badgesAPI = {
+  getAll: () => api.get("/api/badges"),
+  check: () => api.post("/api/badges/check"),
+  seed: () => api.post("/api/badges/seed"),
 };

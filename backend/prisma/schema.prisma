@@ -40,6 +40,19 @@ model User {
   customExercises  CustomExercise[]
   personalRecords  PersonalRecord[]
 
+  // Social (Sprint 4)
+  followers                Follow[]                 @relation("UserFollowing")
+  following                Follow[]                 @relation("UserFollowers")
+  posts                    Post[]
+  reactions                Reaction[]               @relation("UserReactions")
+  comments                 Comment[]
+  // Challenges (Sprint 4)
+  createdChallenges        Challenge[]              @relation("ChallengeCreator")
+  challengeParticipations  ChallengeParticipant[]
+  // Gamification (Sprint 4)
+  userBadges               UserBadge[]
+  notifications            Notification[]           @relation("UserNotifications")
+
   @@map("users")
 }
 
@@ -203,6 +216,48 @@ enum FoodSource {
   SAVED
 }
 
+enum PostType {
+  TEXT
+  IMAGE
+  WORKOUT_SHARE
+  PR_SHARE
+  CHALLENGE_SHARE
+  MILESTONE
+}
+
+enum ReactionType {
+  FIRE
+  MUSCLE
+  CLAP
+  TROPHY
+  TARGET
+}
+
+enum ChallengeType {
+  VOLUME
+  FREQUENCY
+  STREAK
+  SPECIFIC_PR
+  DISTANCE
+  CUSTOM
+}
+
+enum ChallengeStatus {
+  PENDING
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum BadgeCategory {
+  WORKOUT
+  SOCIAL
+  NUTRITION
+  STREAK
+  CHALLENGE
+  MILESTONE
+}
+
 // ─── RÉCORD PERSONAL ──────────────────────────────────
 // Guardamos externalId + name como referencia.
 // NUNCA guardamos datos completos del ejercicio.
@@ -353,4 +408,173 @@ model AiChatMessage {
   createdAt DateTime @default(now())
 
   @@map("ai_chat_messages")
+}
+
+// ─── FOLLOWS ──────────────────────────────────────────
+model Follow {
+  id          String   @id @default(cuid())
+  followerId  String
+  followingId String
+
+  follower    User @relation("UserFollowers", fields: [followerId], references: [id], onDelete: Cascade)
+  following   User @relation("UserFollowing", fields: [followingId], references: [id], onDelete: Cascade)
+
+  createdAt   DateTime @default(now())
+
+  @@unique([followerId, followingId])
+  @@map("follows")
+}
+
+// ─── POSTS ────────────────────────────────────────────
+model Post {
+  id        String   @id @default(cuid())
+  userId    String
+  content   String?
+  imageUrls String[]
+  postType  PostType @default(TEXT)
+
+  workoutId   String?
+  workoutData Json?
+
+  isPublic  Boolean  @default(true)
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reactions Reaction[]
+  comments  Comment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("posts")
+}
+
+// ─── REACTIONS ────────────────────────────────────────
+model Reaction {
+  id       String       @id @default(cuid())
+  postId   String
+  userId   String
+  type     ReactionType
+
+  user    User @relation("UserReactions", fields: [userId], references: [id], onDelete: Cascade)
+  post    Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([postId, userId])
+  @@map("reactions")
+}
+
+// ─── COMMENTS ─────────────────────────────────────────
+model Comment {
+  id       String  @id @default(cuid())
+  postId   String
+  userId   String
+  content  String
+  parentId String?
+
+  post     Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent   Comment?  @relation("CommentReplies", fields: [parentId], references: [id])
+  replies  Comment[] @relation("CommentReplies")
+
+  createdAt DateTime @default(now())
+
+  @@map("comments")
+}
+
+// ─── CHALLENGES ───────────────────────────────────────
+model Challenge {
+  id          String          @id @default(cuid())
+  creatorId   String
+  title       String
+  description String?
+  type        ChallengeType
+  status      ChallengeStatus @default(PENDING)
+
+  targetValue     Float?
+  targetUnit      String?
+  exerciseName    String?
+  externalId      String?
+
+  startDate       DateTime
+  endDate         DateTime
+  maxParticipants Int?
+  isPublic        Boolean  @default(true)
+  xpReward        Int      @default(100)
+
+  creator      User                  @relation("ChallengeCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  participants ChallengeParticipant[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("challenges")
+}
+
+// ─── CHALLENGE PARTICIPANTS ───────────────────────────
+model ChallengeParticipant {
+  id           String  @id @default(cuid())
+  challengeId  String
+  userId       String
+  currentValue Float   @default(0)
+  isWinner     Boolean @default(false)
+  rank         Int?
+
+  challenge Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  joinedAt  DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([challengeId, userId])
+  @@map("challenge_participants")
+}
+
+// ─── BADGES ───────────────────────────────────────────
+model Badge {
+  id          String        @id @default(cuid())
+  slug        String        @unique
+  name        String
+  description String
+  icon        String
+  category    BadgeCategory
+  requirement Json
+  xpReward    Int           @default(50)
+
+  userBadges UserBadge[]
+
+  @@map("badges")
+}
+
+// ─── USER BADGES ──────────────────────────────────────
+model UserBadge {
+  id      String @id @default(cuid())
+  userId  String
+  badgeId String
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badge Badge @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+
+  earnedAt DateTime @default(now())
+
+  @@unique([userId, badgeId])
+  @@map("user_badges")
+}
+
+// ─── NOTIFICATIONS ────────────────────────────────────
+model Notification {
+  id       String  @id @default(cuid())
+  userId   String
+  fromId   String?
+  type     String
+  title    String
+  body     String?
+  data     Json?
+  isRead   Boolean @default(false)
+
+  user User @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@map("notifications")
 }

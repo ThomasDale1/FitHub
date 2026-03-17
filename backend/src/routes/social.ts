@@ -1,0 +1,549 @@
+// ─────────────────────────────────────────────────────
+// backend/src/routes/social.ts
+// Sprint 4: Social — Feed, Posts, Follows, Reactions
+// ─────────────────────────────────────────────────────
+import { Router, Request, Response } from "express"
+import { prisma } from "../lib/prisma.js"
+import { requireAuth } from "../middleware/auth.js"
+import { getAuth } from "@clerk/express"
+
+const router = Router()
+router.use(requireAuth)
+
+// ─── Helper ───────────────────────────────────────────
+async function getUserByClerkId(clerkId: string) {
+  return prisma.user.findUnique({ where: { clerkId } })
+}
+
+// ═══════════════════════════════════════════════════════
+//  FOLLOWS
+// ═══════════════════════════════════════════════════════
+
+// POST /api/social/follow — Seguir a un usuario
+router.post("/follow", async (req: Request, res: Response) => {
+  try {
+    const { userId: clerkId } = getAuth(req)
+    const user = await getUserByClerkId(clerkId!)
+    if (!user) { res.status(404).json({ error: "Usuario no encontrado" }); return }
+
+    const { targetUserId } = req.body
+    if (!targetUserId || targetUserId === user.id) {
+      res.status(400).json({ error: "No puedes seguirte a ti mismo" }); return
+    }
+
+    // Verificar que el target existe
+    const target = await prisma.user.findUnique({ where: { id: targetUserId } })
+    if (!target) { res.status(404).json({ error: "Usuario target no encontrado" }); return }
+
+    // Crear follow (upsert para evitar duplicados)
+    await prisma.follow.create({
+      data: { followerId: user.id, followingId: targetUserId },
+    }).catch(() => {
+      // Ya existe, ignorar
+    })
+
+    // Notificación
+    await prisma.notification.create({
+      data: {
+        userId: targetUserId,
+        fromId: user.id,
+        type: "follow",
+        title: `${user.name} te empezó a seguir`,
+        data: { followerId: user.id },
+      },
+    })
+
+    // XP por interacción social
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { xp: { increment: 3 } },
+    })
+
+    res.json({ success: true, xpEarned: 3 })
+  } catch (error) {
+    res.status(500).json({ error: "Error al seguir usuario" })
+  }
+})
+
+// DELETE /api/social/follow/:userId — Dejar de seguir
+router.delete("/follow/:userId", async (req: Request, res: Response) => {
+  try {
+    const { userId: clerkId } = getAuth(req)
+    const user = await getUserByClerkId(clerkId!)
+    if (!user) { res.status(404).json({ error: "Usuario no encontrado" }); return }
+
+    const targetUserId = req.params.userId as string
+
+    await prisma.follow.deleteMany({
+      where: { followerId: user.id, followingId: targetUserId },
+    })
+
+    res.json({ success: true })
+  } catch (error) {
+    res.status(500).json({ error: "Error al dejar de seguir" })
+  }
+})
+
+// GET /api/social/followers — Mis seguidores
+router.get("/followers", async (req: Request, res: Response) => {
+  try {
+    const { userId: clerkId } = getAuth(req)
+    const user = await getUserByClerkId(clerkId!)
+    if (!user) { res.status(404).json({ error: "Usuario no encontrado" }); return }
+
+    const followers = await prisma.follow.findMany({
+      where: { followingId: user.id },
+      include: {
+        follower: {
+          select: { id: true, name: true, username: true, avatarUrl: true, xp: true, level: true },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    })
+
+    res.json({
+      followers: followers.map((f) => f.follower),
+      count: followers.length,
+    })
+  } catch (error) {
+    res.status(500).json({ error: "Error al obtener seguidores" })
+  }
+})
+
+// GET /api/social/following — A quienes sigo
+router.get("/following", async (req: Request, res: Response) => {
+  try {
+    const { userId: clerkId } = getAuth(req)
+    const user = await getUserByClerkId(clerkId!)
+    if (!user) { res.status(404).json({ error: "Usuario no encontrado" }); return }
+
+    const following = await prisma.follow.findMany({
+      where: { followerId: user.id },
+      include: {
+        following: {
+          select: { id: true, name: true, username: true, avatarUrl: true, xp: true, level: true },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    })
+
+    res.json({
+      following: following.map((f) => f.following),
+      count: following.length,
+    })
+  } catch (error) {
+    res.status(500).json({ error: "Error al obtener siguiendo" })
+  }
+})
+
+// GET /api/social/discover — Descubrir usuarios
+router.get("/discover", async (req: Request, res: Response) => {
+  try {
+    const { userId: clerkId } = getAuth(req)
+    const user = await getUserByClerkId(clerkId!)
+    if (!user) { res.status(404).json({ error: "Usuario no encontrado" }); return }
+
+    // IDs que ya sigo
+    const myFollowing = await prisma.follow.findMany({
+      where: { followerId: user.id },
+      select: { followingId: true },
+    })
+    const followingIds = myFollowing.map((f) => f.followingId)
+
+    // Usuarios sugeridos: los más activos que no sigo
+    const suggestions = await prisma.user.findMany({
+      where: {
+        id: { notIn: [user.id, ...followingIds] },
+      },
+      select: {
+        id: true, name: true, username: true, avatarUrl: true,
+        xp: true, level: true, streak: true, bio: true,
+        _count: { select: { workouts: { where: { isCompleted: true } } } },
+      },
+      orderBy: { xp: "desc" },
+      take: 20,
+    })
+
+    res.json({ suggestions })
+  } catch (error) {
+    res.status(500).json({ error: "Error al descubrir usuarios" })
+  }
+})
+
+// GET /api/social/profile/:userId — Perfil de otro usuario
+router.get("/profile/:userId", async (req: Request, res: Response) => {
+  try {
+    const { userId: clerkId } = getAuth(req)
+    const me = await getUserByClerkId(clerkId!)
+    if (!me) { res.status(404).json({ error: "Usuario no encontrado" }); return }
+
+    const targetId = req.params.userId as string
+
+    const profile = await prisma.user.findUnique({
+      where: { id: targetId },
+      select: {
+        id: true, name: true, username: true, avatarUrl: true,
+        bio: true, xp: true, level: true, streak: true,
+        createdAt: true,
+        _count: {
+          select: {
+            workouts: { where: { isCompleted: true } },
+            posts: true,
+            followers: true,
+            following: true,
+          },
+        },
+      },
+    })
+
+    if (!profile) { res.status(404).json({ error: "Perfil no encontrado" }); return }
+
+    // ¿Lo sigo?
+    const isFollowing = await prisma.follow.findUnique({
+      where: { followerId_followingId: { followerId: me.id, followingId: targetId } },
+    })
+
+    // Posts recientes
+    const posts = await prisma.post.findMany({
+      where: { userId: targetId, isPublic: true },
+      include: {
+        _count: { select: { reactions: true, comments: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 10,
+    })
+
+    res.json({
+      profile: {
+        ...profile,
+        followersCount: profile._count.followers,
+        followingCount: profile._count.following,
+        workoutsCount: profile._count.workouts,
+        postsCount: profile._count.posts,
+      },
+      isFollowing: !!isFollowing,
+      posts,
+    })
+  } catch (error) {
+    res.status(500).json({ error: "Error al obtener perfil" })
+  }
+})
+
+// ═══════════════════════════════════════════════════════
+//  POSTS
+// ═══════════════════════════════════════════════════════
+
+// POST /api/social/posts — Crear post
+router.post("/posts", async (req: Request, res: Response) => {
+  try {
+    const { userId: clerkId } = getAuth(req)
+    const user = await getUserByClerkId(clerkId!)
+    if (!user) { res.status(404).json({ error: "Usuario no encontrado" }); return }
+
+    const { content, imageUrls, postType, workoutId, workoutData } = req.body
+
+    const post = await prisma.post.create({
+      data: {
+        userId: user.id,
+        content: content || null,
+        imageUrls: imageUrls || [],
+        postType: postType || "TEXT",
+        workoutId: workoutId || null,
+        workoutData: workoutData || null,
+      },
+      include: {
+        user: {
+          select: { id: true, name: true, username: true, avatarUrl: true, level: true },
+        },
+        _count: { select: { reactions: true, comments: true } },
+      },
+    })
+
+    // XP por postear
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { xp: { increment: 10 } },
+    })
+
+    res.json({ post, xpEarned: 10 })
+  } catch (error) {
+    console.error("Error creating post:", error)
+    res.status(500).json({ error: "Error al crear post" })
+  }
+})
+
+// GET /api/social/feed — Feed del usuario
+router.get("/feed", async (req: Request, res: Response) => {
+  try {
+    const { userId: clerkId } = getAuth(req)
+    const user = await getUserByClerkId(clerkId!)
+    if (!user) { res.status(404).json({ error: "Usuario no encontrado" }); return }
+
+    // IDs que sigo + yo mismo
+    const following = await prisma.follow.findMany({
+      where: { followerId: user.id },
+      select: { followingId: true },
+    })
+    const feedUserIds = [user.id, ...following.map((f) => f.followingId)]
+
+    const cursor = req.query.cursor as string | undefined
+    const take = 15
+
+    const posts = await prisma.post.findMany({
+      where: {
+        userId: { in: feedUserIds },
+        isPublic: true,
+      },
+      include: {
+        user: {
+          select: { id: true, name: true, username: true, avatarUrl: true, level: true },
+        },
+        reactions: {
+          select: { id: true, userId: true, type: true },
+        },
+        _count: { select: { comments: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: take + 1, // pedir 1 extra para saber si hay más
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+    })
+
+    const hasMore = posts.length > take
+    if (hasMore) posts.pop()
+
+    // Agregar info de mi reacción a cada post
+    const postsWithMyReaction = posts.map((post) => {
+      const myReaction = post.reactions.find((r) => r.userId === user.id)
+      return {
+        ...post,
+        reactionsCount: post.reactions.length,
+        myReaction: myReaction?.type || null,
+        reactions: undefined, // no enviar todas las reactions
+      }
+    })
+
+    res.json({
+      posts: postsWithMyReaction,
+      nextCursor: hasMore ? posts[posts.length - 1].id : null,
+    })
+  } catch (error) {
+    console.error("Feed error:", error)
+    res.status(500).json({ error: "Error al obtener feed" })
+  }
+})
+
+// ═══════════════════════════════════════════════════════
+//  REACTIONS
+// ═══════════════════════════════════════════════════════
+
+// POST /api/social/react — Reaccionar a un post
+router.post("/react", async (req: Request, res: Response) => {
+  try {
+    const { userId: clerkId } = getAuth(req)
+    const user = await getUserByClerkId(clerkId!)
+    if (!user) { res.status(404).json({ error: "Usuario no encontrado" }); return }
+
+    const { postId, type } = req.body // type: FIRE, MUSCLE, CLAP, TROPHY, TARGET
+
+    if (!postId || !type) {
+      res.status(400).json({ error: "postId y type son requeridos" }); return
+    }
+
+    // Check si ya reaccionó
+    const existing = await prisma.reaction.findUnique({
+      where: { postId_userId: { postId, userId: user.id } },
+    })
+
+    if (existing) {
+      if (existing.type === type) {
+        // Mismo tipo: quitar reacción
+        await prisma.reaction.delete({ where: { id: existing.id } })
+        res.json({ action: "removed", type: null })
+        return
+      } else {
+        // Diferente tipo: actualizar
+        await prisma.reaction.update({
+          where: { id: existing.id },
+          data: { type },
+        })
+        res.json({ action: "updated", type })
+        return
+      }
+    }
+
+    // Nueva reacción
+    await prisma.reaction.create({
+      data: { postId, userId: user.id, type },
+    })
+
+    // Notificar al autor del post
+    const post = await prisma.post.findUnique({
+      where: { id: postId },
+      select: { userId: true },
+    })
+
+    if (post && post.userId !== user.id) {
+      const reactionEmojis: Record<string, string> = {
+        FIRE: "🔥", MUSCLE: "💪", CLAP: "👏", TROPHY: "🏆", TARGET: "🎯",
+      }
+      await prisma.notification.create({
+        data: {
+          userId: post.userId,
+          fromId: user.id,
+          type: "reaction",
+          title: `${user.name} reaccionó ${reactionEmojis[type] || ""} a tu post`,
+          data: { postId },
+        },
+      })
+    }
+
+    // XP
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { xp: { increment: 2 } },
+    })
+
+    res.json({ action: "added", type, xpEarned: 2 })
+  } catch (error) {
+    res.status(500).json({ error: "Error al reaccionar" })
+  }
+})
+
+// ═══════════════════════════════════════════════════════
+//  COMMENTS
+// ═══════════════════════════════════════════════════════
+
+// POST /api/social/comments — Comentar en un post
+router.post("/comments", async (req: Request, res: Response) => {
+  try {
+    const { userId: clerkId } = getAuth(req)
+    const user = await getUserByClerkId(clerkId!)
+    if (!user) { res.status(404).json({ error: "Usuario no encontrado" }); return }
+
+    const { postId, content, parentId } = req.body
+
+    if (!postId || !content?.trim()) {
+      res.status(400).json({ error: "postId y content son requeridos" }); return
+    }
+
+    const comment = await prisma.comment.create({
+      data: {
+        postId,
+        userId: user.id,
+        content: content.trim(),
+        parentId: parentId || null,
+      },
+      include: {
+        user: {
+          select: { id: true, name: true, username: true, avatarUrl: true },
+        },
+      },
+    })
+
+    // Notificar al autor
+    const post = await prisma.post.findUnique({
+      where: { id: postId },
+      select: { userId: true },
+    })
+
+    if (post && post.userId !== user.id) {
+      await prisma.notification.create({
+        data: {
+          userId: post.userId,
+          fromId: user.id,
+          type: "comment",
+          title: `${user.name} comentó en tu post`,
+          body: content.trim().substring(0, 100),
+          data: { postId, commentId: comment.id },
+        },
+      })
+    }
+
+    // XP
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { xp: { increment: 3 } },
+    })
+
+    res.json({ comment, xpEarned: 3 })
+  } catch (error) {
+    res.status(500).json({ error: "Error al comentar" })
+  }
+})
+
+// GET /api/social/comments/:postId — Obtener comments de un post
+router.get("/comments/:postId", async (req: Request, res: Response) => {
+  try {
+    const postId = req.params.postId as string
+
+    const comments = await prisma.comment.findMany({
+      where: { postId, parentId: null }, // solo top-level
+      include: {
+        user: {
+          select: { id: true, name: true, username: true, avatarUrl: true },
+        },
+        replies: {
+          include: {
+            user: {
+              select: { id: true, name: true, username: true, avatarUrl: true },
+            },
+          },
+          orderBy: { createdAt: "asc" },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+    })
+
+    res.json({ comments })
+  } catch (error) {
+    res.status(500).json({ error: "Error al obtener comentarios" })
+  }
+})
+
+// ═══════════════════════════════════════════════════════
+//  NOTIFICATIONS
+// ═══════════════════════════════════════════════════════
+
+// GET /api/social/notifications
+router.get("/notifications", async (req: Request, res: Response) => {
+  try {
+    const { userId: clerkId } = getAuth(req)
+    const user = await getUserByClerkId(clerkId!)
+    if (!user) { res.status(404).json({ error: "Usuario no encontrado" }); return }
+
+    const notifications = await prisma.notification.findMany({
+      where: { userId: user.id },
+      orderBy: { createdAt: "desc" },
+      take: 30,
+    })
+
+    const unreadCount = await prisma.notification.count({
+      where: { userId: user.id, isRead: false },
+    })
+
+    res.json({ notifications, unreadCount })
+  } catch (error) {
+    res.status(500).json({ error: "Error al obtener notificaciones" })
+  }
+})
+
+// PUT /api/social/notifications/read — Marcar como leídas
+router.put("/notifications/read", async (req: Request, res: Response) => {
+  try {
+    const { userId: clerkId } = getAuth(req)
+    const user = await getUserByClerkId(clerkId!)
+    if (!user) { res.status(404).json({ error: "Usuario no encontrado" }); return }
+
+    await prisma.notification.updateMany({
+      where: { userId: user.id, isRead: false },
+      data: { isRead: true },
+    })
+
+    res.json({ success: true })
+  } catch (error) {
+    res.status(500).json({ error: "Error al actualizar notificaciones" })
+  }
+})
+
+export default router
