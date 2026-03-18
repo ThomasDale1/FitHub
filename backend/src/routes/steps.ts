@@ -257,17 +257,15 @@ router.get("/month", async (req: Request, res: Response) => {
       { steps: 0, calories: 0, distanceKm: 0, activeMinutes: 0, daysLogged: 0, daysGoalReached: 0 }
     )
 
-    // Step streak (días consecutivos alcanzando meta)
-    let stepStreak = 0
-    const goalDates = new Set(
-      (await prisma.dailySteps.findMany({
-        where: { userId: user.id },
-        select: { date: true, steps: true, goal: true },
-        orderBy: { date: "desc" },
-        take: 90,
-      }))
-        .filter((s) => s.steps >= s.goal)
-        .map((s) => s.date.toISOString().split("T")[0])
+    // Step streak (días consecutivos alcanzando meta) — sin límite de días
+    const allStepDays = await prisma.dailySteps.findMany({
+      where: { userId: user.id },
+      select: { date: true, steps: true, goal: true },
+      orderBy: { date: "desc" },
+    })
+
+    const dayMap = new Map(
+      allStepDays.map((s) => [s.date.toISOString().split("T")[0], s])
     )
 
     const today = new Date()
@@ -277,16 +275,22 @@ router.get("/month", async (req: Request, res: Response) => {
     yesterday.setDate(yesterday.getDate() - 1)
     const yesterdayStr = yesterday.toISOString().split("T")[0]
 
+    const todayRec = dayMap.get(todayStr)
+    const yestRec = dayMap.get(yesterdayStr)
+
     let startFrom: Date | null = null
-    if (goalDates.has(todayStr)) {
+    if (todayRec && todayRec.steps >= todayRec.goal) {
       startFrom = new Date(today)
-    } else if (goalDates.has(yesterdayStr)) {
+    } else if (yestRec && yestRec.steps >= yestRec.goal) {
       startFrom = new Date(yesterday)
     }
 
+    let stepStreak = 0
     if (startFrom) {
       const iter = new Date(startFrom)
-      while (goalDates.has(iter.toISOString().split("T")[0])) {
+      while (true) {
+        const rec = dayMap.get(iter.toISOString().split("T")[0])
+        if (!rec || rec.steps < rec.goal) break
         stepStreak++
         iter.setDate(iter.getDate() - 1)
       }

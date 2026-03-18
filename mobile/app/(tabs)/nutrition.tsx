@@ -16,8 +16,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useState, useCallback, useEffect } from "react";
-import { useAuth } from "@clerk/clerk-expo";
-import { nutritionAPI, setAuthToken, type FoodLogData, type FoodEntry } from "@/lib/api";
+import { nutritionAPI, type FoodLogData, type FoodEntry } from "@/lib/api";
 
 // ─── Constantes ───────────────────────────────────────
 const MEAL_CONFIG = {
@@ -313,7 +312,6 @@ function AddFoodModal({
 // NUTRITION SCREEN
 // ═══════════════════════════════════════════════════════
 export default function NutritionScreen() {
-  const { getToken } = useAuth();
   const [foodLog, setFoodLog] = useState<FoodLogData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -322,8 +320,6 @@ export default function NutritionScreen() {
 
   const fetchData = useCallback(async () => {
     try {
-      const token = await getToken();
-      setAuthToken(token);
       const response = await nutritionAPI.getToday();
       setFoodLog(response.data);
     } catch (err) {
@@ -331,7 +327,7 @@ export default function NutritionScreen() {
     } finally {
       setLoading(false);
     }
-  }, [getToken]);
+  }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -348,8 +344,6 @@ export default function NutritionScreen() {
 
   const handleSaveFood = async (data: any) => {
     try {
-      const token = await getToken();
-      setAuthToken(token);
       await nutritionAPI.addEntry(data);
       setModalVisible(false);
       await fetchData(); // Refresh
@@ -360,8 +354,6 @@ export default function NutritionScreen() {
 
   const handleDeleteEntry = async (id: string) => {
     try {
-      const token = await getToken();
-      setAuthToken(token);
       await nutritionAPI.deleteEntry(id);
       await fetchData();
     } catch (err) {
@@ -371,8 +363,6 @@ export default function NutritionScreen() {
 
   const handleAddWater = async () => {
     try {
-      const token = await getToken();
-      setAuthToken(token);
       await nutritionAPI.addWater(250); // 250ml = 1 vaso
       await fetchData();
     } catch (err) {

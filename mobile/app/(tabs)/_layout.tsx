@@ -1,5 +1,8 @@
 import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { useAuth } from "@clerk/clerk-expo";
+import { useEffect } from "react";
+import { setGetTokenFn } from "@/lib/api";
 
 type IoniconsName = React.ComponentProps<typeof Ionicons>["name"];
 
@@ -8,6 +11,12 @@ function TabIcon({ name, color, size }: { name: IoniconsName; color: string; siz
 }
 
 export default function TabsLayout() {
+  const { getToken } = useAuth();
+
+  // Configurar el token function una sola vez
+  useEffect(() => {
+    setGetTokenFn(getToken);
+  }, [getToken]);
   return (
     <Tabs
       screenOptions={{

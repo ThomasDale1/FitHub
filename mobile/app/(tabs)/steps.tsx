@@ -17,8 +17,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useState, useCallback, useEffect, useRef } from "react";
-import { useAuth } from "@clerk/clerk-expo";
-import { stepsAPI, setAuthToken, type WeekDayData } from "@/lib/api";
+import { stepsAPI, type WeekDayData } from "@/lib/api";
 import { Pedometer } from "expo-sensors";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -256,7 +255,6 @@ function GoalModal({
 // STEPS SCREEN
 // ═══════════════════════════════════════════════════════
 export default function StepsScreen() {
-  const { getToken } = useAuth();
   const [todayData, setTodayData] = useState<any>(null);
   const [weekData, setWeekData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -306,21 +304,16 @@ export default function StepsScreen() {
 
     const syncInterval = setInterval(async () => {
       try {
-        const token = await getToken();
-        setAuthToken(token);
         await stepsAPI.syncSteps(liveSteps);
       } catch {}
     }, 60000); // cada 60 segundos
 
     return () => clearInterval(syncInterval);
-  }, [liveSteps, getToken]);
+  }, [liveSteps]);
 
   // ─── Fetch data ────────────────────────────────────
   const fetchData = useCallback(async () => {
     try {
-      const token = await getToken();
-      setAuthToken(token);
-
       // Sync current steps first
       if (liveSteps > 0) {
         await stepsAPI.syncSteps(liveSteps);
@@ -337,7 +330,7 @@ export default function StepsScreen() {
     } finally {
       setLoading(false);
     }
-  }, [getToken, liveSteps]);
+  }, [liveSteps]);
 
   useEffect(() => {
     fetchData();
@@ -351,8 +344,6 @@ export default function StepsScreen() {
 
   const handleGoalSave = async (goal: number) => {
     try {
-      const token = await getToken();
-      setAuthToken(token);
       await stepsAPI.updateGoal(goal);
       await fetchData();
     } catch {

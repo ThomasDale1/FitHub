@@ -13,7 +13,6 @@ import { useState, useEffect } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { useWorkoutStore } from "@/store/workoutStore";
 import { api } from "@/lib/api";
-import { useAuth } from "@clerk/clerk-expo";
 import ExerciseBlock from "@/components/ExerciseBlock";
 import RestTimer from "@/components/RestTimer";
 
@@ -21,8 +20,6 @@ export default function ActiveWorkoutScreen() {
   const { activeWorkout, finishWorkout, cancelWorkout,
     addSet, removeSet, updateSet, completeSet,
     removeExercise, setWorkoutId, setWorkoutName } = useWorkoutStore();
-
-  const { getToken } = useAuth();
 
   // Timer de descanso
   const [showTimer, setShowTimer] = useState(false);
@@ -50,11 +47,9 @@ export default function ActiveWorkoutScreen() {
 
   const createWorkoutInBackend = async () => {
     try {
-      const token = await getToken();
       const { data } = await api.post(
         "/api/workouts/start",
-        { name: activeWorkout.name },
-        { headers: { Authorization: `Bearer ${token}` } }
+        { name: activeWorkout.name }
       );
       setWorkoutId(data.id);
     } catch (err) {
@@ -101,8 +96,6 @@ export default function ActiveWorkoutScreen() {
 
   const saveAndFinish = async () => {
     try {
-      const token = await getToken();
-
       // Guardar todos los sets completados en el backend
       for (const exercise of activeWorkout.exercises) {
         for (const set of exercise.sets.filter((s) => s.isCompleted)) {
@@ -119,8 +112,7 @@ export default function ActiveWorkoutScreen() {
               setType: set.setType,
               restSeconds: set.restSeconds,
               notes: set.notes,
-            },
-            { headers: { Authorization: `Bearer ${token}` } }
+            }
           );
         }
       }
@@ -128,8 +120,7 @@ export default function ActiveWorkoutScreen() {
       // Finalizar workout
       const { data } = await api.post(
         `/api/workouts/${activeWorkout.workoutId}/finish`,
-        {},
-        { headers: { Authorization: `Bearer ${token}` } }
+        {}
       );
 
       finishWorkout();

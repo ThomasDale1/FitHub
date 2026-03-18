@@ -11,7 +11,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useUser, useAuth } from "@clerk/clerk-expo";
+import { useUser } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
 import { useState, useCallback, useEffect } from "react";
 import { router } from "expo-router";
@@ -20,7 +20,7 @@ import StreakBadge from "@/components/StreakBadge";
 import XPBar from "@/components/XPBar";
 import WorkoutCard from "@/components/WorkoutCard";
 import { useDashboard } from "@/hooks/useUserData";
-import { socialAPI, setAuthToken } from "@/lib/api";
+import { socialAPI } from "@/lib/api";
 
 // Fallback para cuando el backend no responde
 const FALLBACK_DATA = {
@@ -45,7 +45,6 @@ const FALLBACK_DATA = {
 
 export default function DashboardScreen() {
   const { user: clerkUser } = useUser();
-  const { getToken } = useAuth();
   const { data, loading, error, refetch } = useDashboard();
   const [refreshing, setRefreshing] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -54,14 +53,12 @@ export default function DashboardScreen() {
   useEffect(() => {
     const fetchUnread = async () => {
       try {
-        const token = await getToken();
-        setAuthToken(token);
         const res = await socialAPI.getNotifications();
         setUnreadCount(res.data.unreadCount || 0);
       } catch {}
     };
     fetchUnread();
-  }, [getToken]);
+  }, []);
 
   // Usar datos reales o fallback
   const dashData = data || FALLBACK_DATA;

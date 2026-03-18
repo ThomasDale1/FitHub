@@ -17,7 +17,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@clerk/clerk-expo";
 import { router } from "expo-router";
-import { userAPI, nutritionAPI, setAuthToken } from "@/lib/api";
+import { userAPI, nutritionAPI } from "@/lib/api";
 
 // ─── Settings Row ────────────────────────────────────
 function SettingsRow({
@@ -93,7 +93,7 @@ function ToggleRow({
 // SETTINGS SCREEN
 // ═══════════════════════════════════════════════════════
 export default function SettingsScreen() {
-  const { signOut, getToken } = useAuth();
+  const { signOut } = useAuth();
   const [autoShare, setAutoShare] = useState(true);
   const [publicProfile, setPublicProfile] = useState(true);
   const [showNutritionGoals, setShowNutritionGoals] = useState(false);
@@ -109,8 +109,6 @@ export default function SettingsScreen() {
   useEffect(() => {
     const load = async () => {
       try {
-        const token = await getToken();
-        setAuthToken(token);
         const res = await userAPI.getProfile();
         const u = res.data;
         if (u.calorieGoal) setCalorieGoal(String(u.calorieGoal));
@@ -120,13 +118,11 @@ export default function SettingsScreen() {
       } catch {}
     };
     load();
-  }, [getToken]);
+  }, []);
 
   const handleSaveNutritionGoals = async () => {
     setSaving(true);
     try {
-      const token = await getToken();
-      setAuthToken(token);
       await nutritionAPI.updateGoals({
         calorieGoal: parseInt(calorieGoal) || 2000,
         proteinGoal: parseFloat(proteinGoal) || 150,

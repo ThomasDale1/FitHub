@@ -13,9 +13,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useState, useCallback, useEffect } from "react";
-import { useAuth } from "@clerk/clerk-expo";
 import { router } from "expo-router";
-import { socialAPI, setAuthToken } from "@/lib/api";
+import { socialAPI } from "@/lib/api";
 
 // Notification type → icon + color mapping
 const NOTIF_CONFIG: Record<string, { icon: keyof typeof Ionicons.glyphMap; color: string }> = {
@@ -42,15 +41,12 @@ function timeAgo(dateStr: string) {
 }
 
 export default function NotificationsScreen() {
-  const { getToken } = useAuth();
   const [notifications, setNotifications] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchNotifications = useCallback(async () => {
     try {
-      const token = await getToken();
-      setAuthToken(token);
       const res = await socialAPI.getNotifications();
       setNotifications(res.data.notifications);
       // Mark as read
@@ -60,7 +56,7 @@ export default function NotificationsScreen() {
     } finally {
       setLoading(false);
     }
-  }, [getToken]);
+  }, []);
 
   useEffect(() => {
     fetchNotifications();

@@ -18,12 +18,11 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { useState, useCallback, useEffect } from "react";
-import { useAuth, useUser } from "@clerk/clerk-expo";
+import { useUser } from "@clerk/clerk-expo";
 import { router } from "expo-router";
 import {
   socialAPI,
   badgesAPI,
-  setAuthToken,
   type SocialPost,
 } from "@/lib/api";
 
@@ -289,7 +288,6 @@ function CreatePostModal({
 // SOCIAL SCREEN
 // ═══════════════════════════════════════════════════════
 export default function SocialScreen() {
-  const { getToken } = useAuth();
   const { user: clerkUser } = useUser();
   const [activeTab, setActiveTab] = useState<"feed" | "discover" | "challenges">("feed");
   const [posts, setPosts] = useState<SocialPost[]>([]);
@@ -301,8 +299,6 @@ export default function SocialScreen() {
 
   const fetchFeed = useCallback(async () => {
     try {
-      const token = await getToken();
-      setAuthToken(token);
       const res = await socialAPI.getFeed();
       setPosts(res.data.posts);
     } catch (err) {
@@ -310,49 +306,41 @@ export default function SocialScreen() {
     } finally {
       setLoading(false);
     }
-  }, [getToken]);
+  }, []);
 
   const fetchDiscover = useCallback(async () => {
     try {
-      const token = await getToken();
-      setAuthToken(token);
       const res = await socialAPI.discover();
       setSuggestions(res.data.suggestions);
     } catch (err) {
       console.error("Discover error:", err);
     }
-  }, [getToken]);
+  }, []);
 
   useEffect(() => {
     fetchFeed();
     fetchDiscover();
     // Get my userId
-    getToken().then(async (token) => {
-      setAuthToken(token);
+    import("@/lib/api").then(async (m) => {
       try {
-        const res = await import("@/lib/api").then((m) => m.userAPI.getProfile());
+        const res = await m.userAPI.getProfile();
         setMyUserId(res.data.id);
       } catch {}
     });
-  }, [fetchFeed, fetchDiscover, getToken]);
+  }, [fetchFeed, fetchDiscover]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await fetchFeed();
     await fetchDiscover();
-    // Check badges
     try {
-      const token = await getToken();
-      setAuthToken(token);
       await badgesAPI.check();
     } catch {}
     setRefreshing(false);
-  }, [fetchFeed, fetchDiscover, getToken]);
+  }, [fetchFeed, fetchDiscover]);
 
   const handleReact = async (postId: string, type: string) => {
     try {
-      const token = await getToken();
-      setAuthToken(token);
       const res = await socialAPI.react(postId, type);
       // Update local state
       setPosts((prev) =>
@@ -378,8 +366,6 @@ export default function SocialScreen() {
 
   const handleCreatePost = async (content: string) => {
     try {
-      const token = await getToken();
-      setAuthToken(token);
       await socialAPI.createPost({ content, postType: "TEXT" });
       await fetchFeed();
     } catch (err) {
@@ -389,8 +375,6 @@ export default function SocialScreen() {
 
   const handleFollow = async (targetUserId: string) => {
     try {
-      const token = await getToken();
-      setAuthToken(token);
       await socialAPI.follow(targetUserId);
       setSuggestions((prev) => prev.filter((s) => s.id !== targetUserId));
     } catch (err) {

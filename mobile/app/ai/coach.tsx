@@ -16,9 +16,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useAuth } from "@clerk/clerk-expo";
 import { router } from "expo-router";
-import { aiAPI, setAuthToken, type AiMessage } from "@/lib/api";
+import { aiAPI, type AiMessage } from "@/lib/api";
 
 // ─── Quick Action Button ─────────────────────────────
 function QuickAction({
@@ -96,7 +95,6 @@ function ChatBubble({
 // AI COACH SCREEN
 // ═══════════════════════════════════════════════════════
 export default function AiCoachScreen() {
-  const { getToken } = useAuth();
   const [messages, setMessages] = useState<AiMessage[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -106,8 +104,6 @@ export default function AiCoachScreen() {
   // Cargar historial
   const loadHistory = useCallback(async () => {
     try {
-      const token = await getToken();
-      setAuthToken(token);
       const response = await aiAPI.getHistory();
       setMessages(response.data.messages);
     } catch (err) {
@@ -115,7 +111,7 @@ export default function AiCoachScreen() {
     } finally {
       setLoading(false);
     }
-  }, [getToken]);
+  }, []);
 
   useEffect(() => {
     loadHistory();
@@ -145,8 +141,6 @@ export default function AiCoachScreen() {
     setSending(true);
 
     try {
-      const token = await getToken();
-      setAuthToken(token);
       const response = await aiAPI.chat(messageText);
 
       // Agregar respuesta de la IA
@@ -192,8 +186,6 @@ export default function AiCoachScreen() {
     setSending(true);
 
     try {
-      const token = await getToken();
-      setAuthToken(token);
       const response = await aiAPI.quick(type as any);
       const aiMsg: AiMessage = {
         id: `ai_${Date.now()}`,
@@ -223,8 +215,6 @@ export default function AiCoachScreen() {
         style: "destructive",
         onPress: async () => {
           try {
-            const token = await getToken();
-            setAuthToken(token);
             await aiAPI.clearHistory();
             setMessages([]);
           } catch (err) {

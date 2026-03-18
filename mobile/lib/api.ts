@@ -8,8 +8,47 @@ export const API_URL = "https://fithub-d1pe.onrender.com";
 
 export const api = axios.create({
   baseURL: API_URL,
-  timeout: 15000,
+  timeout: 100000,
 });
+
+// ─── Auth interceptor automático ─────────────────────
+// Inyecta el token en cada request automáticamente
+let getTokenFn: (() => Promise<string | null>) | null = null;
+
+export const setGetTokenFn = (fn: () => Promise<string | null>) => {
+  getTokenFn = fn;
+};
+
+api.interceptors.request.use(async (config) => {
+  if (getTokenFn) {
+    try {
+      const token = await getTokenFn();
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+    } catch {}
+  }
+  return config;
+});
+
+// ─── Retry interceptor (para cold starts de Render) ──
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const config = error.config;
+    // Solo reintentar en timeout o network error, máximo 1 retry
+    if (
+      (error.code === "ECONNABORTED" || !error.response) &&
+      !config._retry
+    ) {
+      config._retry = true;
+      // Esperar 2 segundos antes de reintentar
+      await new Promise((r) => setTimeout(r, 2000));
+      return api(config);
+    }
+    return Promise.reject(error);
+  }
+);
 
 // ─── Auth interceptor ─────────────────────────────────
 // Configurar esto en el layout raíz para inyectar el token

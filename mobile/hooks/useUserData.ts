@@ -3,42 +3,17 @@
 // Sprint 2: Hooks para datos de usuario y dashboard
 // ─────────────────────────────────────────────────────
 import { useState, useEffect, useCallback } from "react";
-import { useAuth } from "@clerk/clerk-expo";
 import {
   userAPI,
-  setAuthToken,
   type UserProfile,
   type UserStats,
   type DashboardData,
   type WeeklyProgress,
 } from "@/lib/api";
 
-// ─── Hook: Auth Token Setup ──────────────────────────
-// Usar en el layout raíz para configurar el token globalmente
-export function useAuthSetup() {
-  const { getToken } = useAuth();
-
-  useEffect(() => {
-    const setupToken = async () => {
-      try {
-        const token = await getToken();
-        setAuthToken(token);
-      } catch (error) {
-        console.error("Error obteniendo token:", error);
-      }
-    };
-
-    setupToken();
-
-    // Refrescar token cada 50 segundos (expira en 60s)
-    const interval = setInterval(setupToken, 50000);
-    return () => clearInterval(interval);
-  }, [getToken]);
-}
 
 // ─── Hook: Dashboard Data ────────────────────────────
 export function useDashboard() {
-  const { getToken } = useAuth();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -47,8 +22,6 @@ export function useDashboard() {
     try {
       setLoading(true);
       setError(null);
-      const token = await getToken();
-      setAuthToken(token);
       const response = await userAPI.getDashboard();
       setData(response.data);
     } catch (err: any) {
@@ -57,7 +30,7 @@ export function useDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [getToken]);
+  }, []);
 
   useEffect(() => {
     fetch();
@@ -68,7 +41,6 @@ export function useDashboard() {
 
 // ─── Hook: User Profile ──────────────────────────────
 export function useProfile() {
-  const { getToken } = useAuth();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -77,8 +49,6 @@ export function useProfile() {
     try {
       setLoading(true);
       setError(null);
-      const token = await getToken();
-      setAuthToken(token);
       const response = await userAPI.getProfile();
       setProfile(response.data);
     } catch (err: any) {
@@ -86,22 +56,17 @@ export function useProfile() {
     } finally {
       setLoading(false);
     }
-  }, [getToken]);
+  }, []);
 
-  const updateProfile = useCallback(
-    async (data: Partial<UserProfile>) => {
-      try {
-        const token = await getToken();
-        setAuthToken(token);
-        const response = await userAPI.updateProfile(data);
-        setProfile(response.data);
-        return response.data;
-      } catch (err: any) {
-        throw new Error(err.message || "Error al actualizar perfil");
-      }
-    },
-    [getToken]
-  );
+  const updateProfile = useCallback(async (data: Partial<UserProfile>) => {
+    try {
+      const response = await userAPI.updateProfile(data);
+      setProfile(response.data);
+      return response.data;
+    } catch (err: any) {
+      throw new Error(err.message || "Error al actualizar perfil");
+    }
+  }, []);
 
   useEffect(() => {
     fetch();
@@ -112,7 +77,6 @@ export function useProfile() {
 
 // ─── Hook: User Stats (lifetime) ─────────────────────
 export function useUserStats() {
-  const { getToken } = useAuth();
   const [stats, setStats] = useState<UserStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -121,8 +85,6 @@ export function useUserStats() {
     try {
       setLoading(true);
       setError(null);
-      const token = await getToken();
-      setAuthToken(token);
       const response = await userAPI.getStats();
       setStats(response.data);
     } catch (err: any) {
@@ -130,7 +92,7 @@ export function useUserStats() {
     } finally {
       setLoading(false);
     }
-  }, [getToken]);
+  }, []);
 
   useEffect(() => {
     fetch();
@@ -141,15 +103,12 @@ export function useUserStats() {
 
 // ─── Hook: Weekly Progress ───────────────────────────
 export function useProgress() {
-  const { getToken } = useAuth();
   const [progress, setProgress] = useState<WeeklyProgress | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetch = useCallback(async () => {
     try {
       setLoading(true);
-      const token = await getToken();
-      setAuthToken(token);
       const response = await userAPI.getProgress();
       setProgress(response.data);
     } catch (err) {
@@ -157,7 +116,7 @@ export function useProgress() {
     } finally {
       setLoading(false);
     }
-  }, [getToken]);
+  }, []);
 
   useEffect(() => {
     fetch();
