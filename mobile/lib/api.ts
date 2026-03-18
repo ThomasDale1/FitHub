@@ -52,16 +52,6 @@ api.interceptors.response.use(
 
 // ─── Auth interceptor ─────────────────────────────────
 // Configurar esto en el layout raíz para inyectar el token
-let authToken: string | null = null;
-
-export const setAuthToken = (token: string | null) => {
-  authToken = token;
-  if (token) {
-    api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
-  } else {
-    delete api.defaults.headers.common["Authorization"];
-  }
-};
 
 // ─── Types ────────────────────────────────────────────
 export interface Exercise {
@@ -506,8 +496,11 @@ export const badgesAPI = {
 
 // ─── Steps API ────────────────────────────────────────
 export const stepsAPI = {
-  syncSteps: (steps: number, hourlySteps?: number[]) =>
-    api.post("/api/steps/sync", { steps, hourlySteps }),
+  syncSteps: (steps: number, hourlySteps?: number[]) => {
+    // Enviar fecha local (YYYY-MM-DD) para que el backend no use UTC
+    const localDate = new Date().toLocaleDateString("en-CA");
+    return api.post("/api/steps/sync", { steps, hourlySteps, date: localDate });
+  },
 
   getToday: () => api.get<DailyStepsData>("/api/steps/today"),
 

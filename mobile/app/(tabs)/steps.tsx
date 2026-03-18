@@ -264,6 +264,9 @@ export default function StepsScreen() {
   const [liveSteps, setLiveSteps] = useState(0);
   const subscriptionRef = useRef<any>(null);
 
+  // Ref para guardar pasos base (antes de iniciar suscripción)
+  const initialStepsRef = useRef(0);
+
   // ─── Pedometer setup ───────────────────────────────
   useEffect(() => {
     const setupPedometer = async () => {
@@ -271,20 +274,26 @@ export default function StepsScreen() {
       setPedometerAvailable(available);
 
       if (available) {
-        // Obtener pasos desde medianoche
+        // Obtener pasos acumulados desde medianoche local
         const midnight = new Date();
         midnight.setHours(0, 0, 0, 0);
 
         try {
           const result = await Pedometer.getStepCountAsync(midnight, new Date());
+          initialStepsRef.current = result.steps;
           setLiveSteps(result.steps);
+          // Sync inmediato al montar (sin esperar el primer intervalo de 60s)
+          if (result.steps > 0) {
+            stepsAPI.syncSteps(result.steps).catch(() => {});
+          }
         } catch (err) {
           console.log("Error getting step count:", err);
         }
 
-        // Suscribirse a updates en tiempo real
+        // watchStepCount en iOS devuelve pasos ACUMULADOS desde que inició
+        // la suscripción (no incrementales), por eso usamos initialSteps + result.steps
         subscriptionRef.current = Pedometer.watchStepCount((result) => {
-          setLiveSteps((prev) => prev + result.steps);
+          setLiveSteps(initialStepsRef.current + result.steps);
         });
       }
     };
@@ -298,27 +307,18 @@ export default function StepsScreen() {
     };
   }, []);
 
-  // ─── Sync live steps al backend cada 60 segundos ──
+  // ─── Sync al backend cada 60 segundos ─────────────
   useEffect(() => {
     if (liveSteps <= 0) return;
-
-    const syncInterval = setInterval(async () => {
-      try {
-        await stepsAPI.syncSteps(liveSteps);
-      } catch {}
-    }, 60000); // cada 60 segundos
-
+    const syncInterval = setInterval(() => {
+      stepsAPI.syncSteps(liveSteps).catch(() => {});
+    }, 60000);
     return () => clearInterval(syncInterval);
   }, [liveSteps]);
 
-  // ─── Fetch data ────────────────────────────────────
+  // ─── Fetch data (solo lectura, sin sync) ───────────
   const fetchData = useCallback(async () => {
     try {
-      // Sync current steps first
-      if (liveSteps > 0) {
-        await stepsAPI.syncSteps(liveSteps);
-      }
-
       const [todayRes, weekRes] = await Promise.all([
         stepsAPI.getToday(),
         stepsAPI.getWeek(),
@@ -330,11 +330,12 @@ export default function StepsScreen() {
     } finally {
       setLoading(false);
     }
-  }, [liveSteps]);
+  }, []);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
