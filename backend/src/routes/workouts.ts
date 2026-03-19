@@ -6,6 +6,7 @@ import {
   calculate1RM,
   calculateWorkoutXP,
 } from "../lib/muscleStimulus.js"
+import { sendPushToUser } from "../lib/pushNotifications.js"
 
 const router = Router()
 router.use(requireAuth)
@@ -319,6 +320,7 @@ router.post("/:id/finish", async (req: Request, res: Response) => {
               data: { workouts: totalWorkouts },
             },
           })
+          sendPushToUser(userId!, "🏆 Milestone!", m.msg, { type: "milestone" })
           // Milestone post
           await prisma.post.create({
             data: {
@@ -333,6 +335,15 @@ router.post("/:id/finish", async (req: Request, res: Response) => {
     } catch (badgeErr) {
       console.error("Badge check error (non-blocking):", badgeErr)
     }
+
+    // Push notification de workout completado
+    const prText = newPRs > 0 ? ` | ${newPRs} PR 🏆` : ""
+    sendPushToUser(
+      userId!,
+      "💪 Workout completado!",
+      `${workout.name} — ${durationMinutes} min, +${xpEarned} XP${prText}`,
+      { type: "workout_complete", workoutId }
+    )
 
     res.json({
       workout: finishedWorkout,
