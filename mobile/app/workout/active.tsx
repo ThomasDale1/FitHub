@@ -94,38 +94,38 @@ export default function ActiveWorkoutScreen() {
     );
   };
 
+  const [isFinishing, setIsFinishing] = useState(false);
+
   const saveAndFinish = async () => {
+    setIsFinishing(true);
     try {
-      // Guardar todos los sets completados en el backend
-      for (const exercise of activeWorkout.exercises) {
-        for (const set of exercise.sets.filter((s) => s.isCompleted)) {
-          await api.post(
-            `/api/workouts/${activeWorkout.workoutId}/sets`,
-            {
-              externalId: exercise.externalId,
-              exerciseName: exercise.exerciseName,
-              order: exercise.order,
-              setNumber: set.setNumber,
-              weight: parseFloat(set.weight) || null,
-              reps: parseInt(set.reps) || null,
-              rpe: set.rpe ? parseFloat(set.rpe) : null,
-              setType: set.setType,
-              restSeconds: set.restSeconds,
-              notes: set.notes,
-            }
-          );
-        }
-      }
+      // Guardar todos los sets en paralelo para velocidad
+      const setPromises = activeWorkout.exercises.flatMap((exercise) =>
+        exercise.sets.filter((s) => s.isCompleted).map((set) =>
+          api.post(`/api/workouts/${activeWorkout.workoutId}/sets`, {
+            externalId: exercise.externalId,
+            exerciseName: exercise.exerciseName,
+            order: exercise.order,
+            setNumber: set.setNumber,
+            weight: parseFloat(set.weight) || null,
+            reps: parseInt(set.reps) || null,
+            rpe: set.rpe ? parseFloat(set.rpe) : null,
+            setType: set.setType,
+            restSeconds: set.restSeconds,
+            notes: set.notes,
+          })
+        )
+      );
+      await Promise.all(setPromises);
 
       // Finalizar workout
+      const workoutName = activeWorkout.name;
       const { data } = await api.post(
         `/api/workouts/${activeWorkout.workoutId}/finish`,
         {}
       );
 
-      finishWorkout();
-
-      // Ir al resumen
+      // Navegar ANTES de limpiar el store para que el useEffect no haga router.back()
       router.replace({
         pathname: "/workout/summary",
         params: {
@@ -133,10 +133,14 @@ export default function ActiveWorkoutScreen() {
           newPRs: data.newPRs,
           totalVolume: data.totalVolume,
           durationMinutes: data.durationMinutes,
-          workoutName: activeWorkout.name,
+          workoutName,
         },
       });
+
+      // Limpiar store después de navegar
+      finishWorkout();
     } catch (err) {
+      setIsFinishing(false);
       console.error("Error finalizando workout:", err);
       Alert.alert("Error", "No se pudo guardar el workout.");
     }
@@ -161,10 +165,10 @@ export default function ActiveWorkoutScreen() {
   };
 
   useEffect(() => {
-    if (!activeWorkout.isActive) {
+    if (!activeWorkout.isActive && !isFinishing) {
       router.back();
     }
-  }, [activeWorkout.isActive]);
+  }, [activeWorkout.isActive, isFinishing]);
 
   if (!activeWorkout.isActive) {
     return null;
