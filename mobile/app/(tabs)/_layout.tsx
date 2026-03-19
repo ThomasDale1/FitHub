@@ -1,13 +1,64 @@
 import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "@clerk/clerk-expo";
-import { useEffect } from "react";
-import { setGetTokenFn } from "@/lib/api";
+import { useEffect, useState, useCallback } from "react";
+import { setGetTokenFn, socialAPI } from "@/lib/api";
+import { useNotifications } from "@/hooks/useNotifications";
+import { View, Text } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
 
 type IoniconsName = React.ComponentProps<typeof Ionicons>["name"];
 
 function TabIcon({ name, color, size }: { name: IoniconsName; color: string; size: number }) {
   return <Ionicons name={name} size={size} color={color} />;
+}
+
+function SocialTabIcon({ color, size }: { color: string; size: number }) {
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useFocusEffect(
+    useCallback(() => {
+      socialAPI.getNotifications().then((res) => {
+        setUnreadCount(res.data.unreadCount || 0);
+      }).catch(() => {});
+    }, [])
+  );
+
+  // Also poll every 30 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      socialAPI.getNotifications().then((res) => {
+        setUnreadCount(res.data.unreadCount || 0);
+      }).catch(() => {});
+    }, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <View>
+      <Ionicons name="people" size={size} color={color} />
+      {unreadCount > 0 && (
+        <View
+          style={{
+            position: "absolute",
+            top: -4,
+            right: -8,
+            backgroundColor: "#FF4757",
+            borderRadius: 8,
+            minWidth: 16,
+            height: 16,
+            justifyContent: "center",
+            alignItems: "center",
+            paddingHorizontal: 3,
+          }}
+        >
+          <Text style={{ color: "#FFF", fontSize: 9, fontWeight: "800" }}>
+            {unreadCount > 99 ? "99+" : unreadCount}
+          </Text>
+        </View>
+      )}
+    </View>
+  );
 }
 
 export default function TabsLayout() {
@@ -17,6 +68,10 @@ export default function TabsLayout() {
   useEffect(() => {
     setGetTokenFn(getToken);
   }, [getToken]);
+
+  // Initialize push notifications
+  useNotifications();
+
   return (
     <Tabs
       screenOptions={{
@@ -69,7 +124,7 @@ export default function TabsLayout() {
         options={{
           title: "Social",
           tabBarIcon: ({ color, size }) => (
-            <TabIcon name="people" color={color} size={size} />
+            <SocialTabIcon color={color} size={size} />
           ),
         }}
       />

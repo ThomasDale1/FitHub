@@ -247,16 +247,63 @@ export interface ChallengeData {
   description: string | null;
   type: string;
   status: string;
-  targetValue: number | null;
-  targetUnit: string | null;
-  exerciseName: string | null;
+  // ← goal y unit son los campos reales del schema
+  goal: number;
+  unit: string;
   startDate: string;
   endDate: string;
+  isPublic: boolean;
+  maxParticipants: number | null;
   xpReward: number;
-  creator: { id: string; name: string; username: string; avatarUrl: string | null };
-  participantsCount: number;
-  myProgress: { currentValue: number; isWinner: boolean; rank: number | null } | null;
+  createdAt: string;
   isJoined: boolean;
+  participantsCount: number;
+  creator: {
+    id: string;
+    name: string;
+    username: string;
+    avatarUrl: string | null;
+    level: number;
+  };
+  // El progreso del usuario actual en este challenge
+  myProgress: {
+    currentValue: number;  // ← currentValue, no progress
+    isWinner: boolean;
+    rank: number | null;
+  } | null;
+  // Lista de participantes (solo en getById, incluye rank y percentage)
+  participants: ChallengeParticipantData[];
+}
+
+export interface ChallengeParticipantData {
+  id: string;
+  userId: string;
+  currentValue: number;
+  isWinner: boolean;
+  rank: number;
+  percentage: number;
+  joinedAt: string;
+  user: {
+    id: string;
+    name: string;
+    username: string;
+    avatarUrl: string | null;
+    level: number;
+    xp: number;
+  };
+}
+
+export interface LeaderboardUser {
+  id: string;
+  name: string;
+  username: string;
+  avatarUrl: string | null;
+  xp: number;
+  level: number;
+  streak: number;
+  rank: number;
+  value: number;
+  unit: string;
 }
  
 export interface BadgeData {
@@ -478,13 +525,38 @@ export const socialAPI = {
  
 // ─── Challenges API (Sprint 4) ────────────────────────
 export const challengesAPI = {
-  getAll: (filter?: string) =>
-    api.get(`/api/challenges${filter ? `?filter=${filter}` : ""}`),
-  getById: (id: string) => api.get(`/api/challenges/${id}`),
-  create: (data: any) => api.post("/api/challenges", data),
-  join: (id: string) => api.post(`/api/challenges/${id}/join`),
-  getLeaderboard: (period?: string) =>
-    api.get(`/api/challenges/leaderboard/global${period ? `?period=${period}` : ""}`),
+  getAll: (filter: "active" | "mine" | "available" = "active") =>
+    api.get<ChallengeData[]>(`/api/challenges?filter=${filter}`),
+
+  getById: (id: string) =>
+    api.get<ChallengeData>(`/api/challenges/${id}`),
+
+  create: (data: {
+    title: string;
+    description?: string;
+    type: string;
+    goal: number;
+    unit: string;
+    startDate: string;
+    endDate: string;
+    isPublic?: boolean;
+    maxParticipants?: number;
+    xpReward?: number;
+  }) => api.post<ChallengeData>("/api/challenges", data),
+
+  join: (id: string) =>
+    api.post(`/api/challenges/${id}/join`),
+
+  leave: (id: string) =>
+    api.post(`/api/challenges/${id}/leave`),
+
+  getLeaderboard: (
+    category: "xp" | "volume" | "streak" = "xp",
+    period: "weekly" | "monthly" | "alltime" = "alltime"
+  ) =>
+    api.get<LeaderboardUser[]>(
+      `/api/challenges/leaderboard/global?category=${category}&period=${period}`
+    ),
 };
  
 // ─── Badges API (Sprint 4) ───────────────────────────
@@ -492,6 +564,14 @@ export const badgesAPI = {
   getAll: () => api.get("/api/badges"),
   check: () => api.post("/api/badges/check"),
   seed: () => api.post("/api/badges/seed"),
+};
+
+// ─── Push Token API ──────────────────────────────────
+export const pushTokenAPI = {
+  register: (token: string, platform: string) =>
+    api.post("/api/push-token", { token, platform }),
+  unregister: (token: string) =>
+    api.delete("/api/push-token", { data: { token } }),
 };
 
 // ─── Steps API ────────────────────────────────────────

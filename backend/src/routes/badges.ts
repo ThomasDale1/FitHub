@@ -6,6 +6,7 @@ import { Router, Request, Response } from "express"
 import { prisma } from "../lib/prisma.js"
 import { requireAuth } from "../middleware/auth.js"
 import { getAuth } from "@clerk/express"
+import { sendPushToUser } from "../lib/pushNotifications.js"
 
 const router = Router()
 router.use(requireAuth)
@@ -208,16 +209,18 @@ router.post("/check", async (req: Request, res: Response) => {
         totalXpEarned += badge.xpReward
         newBadges.push(badge.slug)
 
-        // Notificación
+        // Notificación in-app + push
+        const badgeTitle = `¡Nuevo logro: ${badge.name}! ${badge.icon}`
         await prisma.notification.create({
           data: {
             userId: user.id,
             type: "badge",
-            title: `¡Nuevo logro: ${badge.name}! ${badge.icon}`,
+            title: badgeTitle,
             body: badge.description,
             data: { badgeId: badge.id, slug: badge.slug },
           },
         })
+        sendPushToUser(user.id, badgeTitle, badge.description, { type: "badge", badgeId: badge.id })
       }
     }
 

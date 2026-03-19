@@ -54,6 +54,7 @@ model User {
   notifications            Notification[]           @relation("UserNotifications")
 
   dailySteps               DailySteps[]
+  pushTokens               PushToken[]
 
   @@map("users")
 }
@@ -239,7 +240,7 @@ enum ChallengeType {
   VOLUME
   FREQUENCY
   STREAK
-  SPECIFIC_PR
+  PR
   DISTANCE
   CUSTOM
 }
@@ -493,22 +494,18 @@ model Challenge {
   type        ChallengeType
   status      ChallengeStatus @default(PENDING)
 
-  targetValue     Float?
-  targetUnit      String?
-  exerciseName    String?
-  externalId      String?
-
+  goal            Float           // la meta numérica: ej 10000 kg
+  unit            String          // "kg", "sesiones", "días", "km"
   startDate       DateTime
   endDate         DateTime
-  maxParticipants Int?
-  isPublic        Boolean  @default(true)
-  xpReward        Int      @default(100)
+  isPublic        Boolean         @default(true)
+  maxParticipants Int?            // null = sin límite
+  xpReward        Int             @default(100)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
 
-  creator      User                  @relation("ChallengeCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  creator      User                   @relation("ChallengeCreator", fields: [creatorId], references: [id], onDelete: Cascade)
   participants ChallengeParticipant[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 
   @@map("challenges")
 }
@@ -579,6 +576,21 @@ model Notification {
   createdAt DateTime @default(now())
 
   @@map("notifications")
+}
+
+// ─── PUSH TOKENS ────────────────────────────────────────
+model PushToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  platform  String?  // "ios" | "android"
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("push_tokens")
 }
 
 // ─── DAILY STEPS ──────────────────────────────────────

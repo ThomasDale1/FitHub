@@ -1,315 +1,350 @@
-// ─────────────────────────────────────────────────────
-// backend/src/routes/challenges.ts
-// Sprint 4: Challenges + Leaderboards
-// ─────────────────────────────────────────────────────
-import { Router, Request, Response } from "express"
-import { prisma } from "../lib/prisma.js"
-import { requireAuth } from "../middleware/auth.js"
-import { getAuth } from "@clerk/express"
+import { Router, Request, Response } from "express";
+import { getAuth } from "@clerk/express";
+import { prisma } from "../lib/prisma.js";
+import { sendPushToUser } from "../lib/pushNotifications.js";
 
-const router = Router()
-router.use(requireAuth)
+const router = Router();
 
-async function getUserByClerkId(clerkId: string) {
-  return prisma.user.findUnique({ where: { clerkId } })
+// ─── Helper: clerkId → prismaId ──────────────────────
+async function getPrismaUserId(clerkId: string): Promise<string | null> {
+  const user = await prisma.user.findUnique({
+    where: { clerkId },
+    select: { id: true },
+  });
+  return user?.id ?? null;
 }
 
-// ═══════════════════════════════════════════════════════
-//  CHALLENGES
-// ═══════════════════════════════════════════════════════
-
-// POST /api/challenges — Crear challenge
-router.post("/", async (req: Request, res: Response) => {
-  try {
-    const { userId: clerkId } = getAuth(req)
-    const user = await getUserByClerkId(clerkId!)
-    if (!user) { res.status(404).json({ error: "Usuario no encontrado" }); return }
-
-    const {
-      title, description, type, targetValue, targetUnit,
-      exerciseName, externalId, startDate, endDate,
-      maxParticipants, isPublic, xpReward,
-    } = req.body
-
-    if (!title || !type || !startDate || !endDate) {
-      res.status(400).json({ error: "title, type, startDate y endDate son requeridos" }); return
-    }
-
-    const challenge = await prisma.challenge.create({
-      data: {
-        creatorId: user.id,
-        title,
-        description: description || null,
-        type,
-        targetValue: targetValue || null,
-        targetUnit: targetUnit || null,
-        exerciseName: exerciseName || null,
-        externalId: externalId || null,
-        startDate: new Date(startDate),
-        endDate: new Date(endDate),
-        maxParticipants: maxParticipants || null,
-        isPublic: isPublic !== false,
-        xpReward: xpReward || 100,
-        status: new Date(startDate) <= new Date() ? "ACTIVE" : "PENDING",
-      },
-    })
-
-    // El creador se une automáticamente
-    await prisma.challengeParticipant.create({
-      data: { challengeId: challenge.id, userId: user.id },
-    })
-
-    // XP por crear challenge
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { xp: { increment: 15 } },
-    })
-
-    res.json({ challenge, xpEarned: 15 })
-  } catch (error) {
-    console.error("Create challenge error:", error)
-    res.status(500).json({ error: "Error al crear challenge" })
-  }
-})
-
-// GET /api/challenges — Listar challenges
+// ─── GET /api/challenges ──────────────────────────────
+// ?filter=active | mine | available
 router.get("/", async (req: Request, res: Response) => {
   try {
-    const { userId: clerkId } = getAuth(req)
-    const user = await getUserByClerkId(clerkId!)
-    if (!user) { res.status(404).json({ error: "Usuario no encontrado" }); return }
+    const { userId: clerkId } = getAuth(req);
+    const userId = await getPrismaUserId(clerkId!);
+    if (!userId) { res.status(401).json({ error: "No autorizado" }); return; }
 
-    const filter = req.query.filter as string // "active", "mine", "available"
+    const { filter = "active" } = req.query;
+    const now = new Date();
+    let where: any = {};
 
-    let where: any = { isPublic: true }
-
-    if (filter === "mine") {
+    if (filter === "active") {
+      // Challenges donde el usuario YA participa y siguen activos
       where = {
-        OR: [
-          { creatorId: user.id },
-          { participants: { some: { userId: user.id } } },
-        ],
-      }
-    } else if (filter === "active") {
-      where = { ...where, status: "ACTIVE" }
+        status: "ACTIVE",
+        endDate: { gte: now },
+        participants: { some: { userId } },
+      };
+    } else if (filter === "mine") {
+      // Challenges que el usuario CREÓ (cualquier estado)
+      where = { creatorId: userId };
     } else if (filter === "available") {
+      // Challenges públicos activos donde el usuario NO participa todavía
       where = {
-        ...where,
-        status: { in: ["PENDING", "ACTIVE"] },
-        participants: { none: { userId: user.id } },
-      }
+        isPublic: true,
+        status: "ACTIVE",
+        endDate: { gte: now },
+        participants: { none: { userId } },
+      };
     }
 
     const challenges = await prisma.challenge.findMany({
       where,
       include: {
         creator: {
-          select: { id: true, name: true, username: true, avatarUrl: true },
+          select: { id: true, name: true, username: true, avatarUrl: true, level: true },
+        },
+        // Top 3 participantes para preview en la card
+        participants: {
+          include: {
+            user: { select: { id: true, name: true, username: true, avatarUrl: true } },
+          },
+          orderBy: { currentValue: "desc" },
+          take: 3,
         },
         _count: { select: { participants: true } },
-        participants: {
-          where: { userId: user.id },
-          select: { currentValue: true, isWinner: true, rank: true },
-          take: 1,
-        },
       },
       orderBy: { createdAt: "desc" },
-      take: 20,
-    })
+    });
 
-    const formatted = challenges.map((c) => ({
-      ...c,
-      participantsCount: c._count.participants,
-      myProgress: c.participants[0] || null,
-      isJoined: c.participants.length > 0,
-      participants: undefined,
-      _count: undefined,
-    }))
+    // Agregar contexto del usuario a cada challenge
+    const enriched = challenges.map((c) => {
+      const myParticipation = c.participants.find((p) => p.userId === userId);
+      return {
+        ...c,
+        isJoined: !!myParticipation,
+        myProgress: myParticipation
+          ? {
+              currentValue: myParticipation.currentValue,
+              isWinner: myParticipation.isWinner,
+              rank: myParticipation.rank,
+            }
+          : null,
+        participantsCount: c._count.participants,
+      };
+    });
 
-    res.json({ challenges: formatted })
+    res.json(enriched);
   } catch (error) {
-    res.status(500).json({ error: "Error al obtener challenges" })
+    console.error("GET /challenges error:", error);
+    res.status(500).json({ error: "Error al obtener challenges" });
   }
-})
+});
 
-// POST /api/challenges/:id/join — Unirse a challenge
-router.post("/:id/join", async (req: Request, res: Response) => {
+// ─── GET /api/challenges/leaderboard/global ───────────
+// IMPORTANTE: esta ruta debe ir ANTES de /:id
+// porque Express evaluaría "leaderboard" como un :id
+router.get("/leaderboard/global", async (req: Request, res: Response) => {
   try {
-    const { userId: clerkId } = getAuth(req)
-    const user = await getUserByClerkId(clerkId!)
-    if (!user) { res.status(404).json({ error: "Usuario no encontrado" }); return }
+    const { category = "xp", period = "alltime" } = req.query;
+    let users: any[] = [];
 
-    const challengeId = req.params.id as string
+    if (category === "xp") {
+      const rawUsers = await prisma.user.findMany({
+        select: {
+          id: true, name: true, username: true,
+          avatarUrl: true, xp: true, level: true, streak: true,
+        },
+        orderBy: { xp: "desc" },
+        take: 50,
+      });
+      users = rawUsers.map((u, i) => ({ ...u, rank: i + 1, value: u.xp, unit: "XP" }));
 
-    const challenge = await prisma.challenge.findUnique({
-      where: { id: challengeId },
-      include: { _count: { select: { participants: true } } },
-    })
+    } else if (category === "volume") {
+      const since =
+        period === "weekly"
+          ? new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+          : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
-    if (!challenge) { res.status(404).json({ error: "Challenge no encontrado" }); return }
-    if (challenge.status === "COMPLETED" || challenge.status === "CANCELLED") {
-      res.status(400).json({ error: "Este challenge ya terminó" }); return
+      const volumeData = await prisma.workout.groupBy({
+        by: ["userId"],
+        where: { isCompleted: true, endTime: { gte: since } },
+        _sum: { totalVolume: true },
+        orderBy: { _sum: { totalVolume: "desc" } },
+        take: 50,
+      });
+
+      const userIds = volumeData.map((v) => v.userId);
+      const userDetails = await prisma.user.findMany({
+        where: { id: { in: userIds } },
+        select: { id: true, name: true, username: true, avatarUrl: true, level: true, xp: true },
+      });
+
+      users = volumeData.map((v, i) => {
+        const user = userDetails.find((u) => u.id === v.userId);
+        return {
+          ...user,
+          rank: i + 1,
+          value: Math.round(v._sum.totalVolume ?? 0),
+          unit: "kg",
+        };
+      });
+
+    } else if (category === "streak") {
+      const rawUsers = await prisma.user.findMany({
+        select: {
+          id: true, name: true, username: true,
+          avatarUrl: true, xp: true, level: true, streak: true,
+        },
+        where: { streak: { gt: 0 } },
+        orderBy: { streak: "desc" },
+        take: 50,
+      });
+      users = rawUsers.map((u, i) => ({ ...u, rank: i + 1, value: u.streak, unit: "días" }));
     }
-    if (challenge.maxParticipants && challenge._count.participants >= challenge.maxParticipants) {
-      res.status(400).json({ error: "Challenge lleno" }); return
-    }
 
-    await prisma.challengeParticipant.create({
-      data: { challengeId, userId: user.id },
-    }).catch(() => {
-      // Ya está unido
-    })
-
-    res.json({ success: true })
+    res.json(users);
   } catch (error) {
-    res.status(500).json({ error: "Error al unirse al challenge" })
+    res.status(500).json({ error: "Error al obtener leaderboard" });
   }
-})
+});
 
-// GET /api/challenges/:id — Detalle + leaderboard del challenge
+// ─── GET /api/challenges/:id ──────────────────────────
 router.get("/:id", async (req: Request, res: Response) => {
   try {
-    const { userId: clerkId } = getAuth(req)
-    const user = await getUserByClerkId(clerkId!)
-    if (!user) { res.status(404).json({ error: "Usuario no encontrado" }); return }
+    const { userId: clerkId } = getAuth(req);
+    const userId = await getPrismaUserId(clerkId!);
+    if (!userId) { res.status(401).json({ error: "No autorizado" }); return; }
 
-    const challengeId = req.params.id as string
+    const id = req.params.id as string;
 
     const challenge = await prisma.challenge.findUnique({
-      where: { id: challengeId },
+      where: { id },
       include: {
         creator: {
-          select: { id: true, name: true, username: true, avatarUrl: true },
+          select: { id: true, name: true, username: true, avatarUrl: true, level: true },
         },
         participants: {
           include: {
             user: {
-              select: { id: true, name: true, username: true, avatarUrl: true, level: true },
+              select: { id: true, name: true, username: true, avatarUrl: true, level: true, xp: true },
             },
           },
           orderBy: { currentValue: "desc" },
         },
+        _count: { select: { participants: true } },
       },
-    })
+    });
 
-    if (!challenge) { res.status(404).json({ error: "Challenge no encontrado" }); return }
+    if (!challenge) {
+      res.status(404).json({ error: "Challenge no encontrado" });
+      return;
+    }
 
-    // Leaderboard con ranking
-    const leaderboard = challenge.participants.map((p, idx) => ({
-      rank: idx + 1,
-      userId: p.user.id,
-      name: p.user.name,
-      username: p.user.username,
-      avatarUrl: p.user.avatarUrl,
-      level: p.user.level,
-      currentValue: p.currentValue,
-      isWinner: p.isWinner,
-      isMe: p.user.id === user.id,
-    }))
+    // Calcular rank y porcentaje de cada participante
+    const leaderboard = challenge.participants.map((p, index) => ({
+      ...p,
+      rank: index + 1,
+      percentage:
+        challenge.goal > 0
+          ? Math.min(100, Math.round((p.currentValue / challenge.goal) * 100))
+          : 0,
+    }));
+
+    const myParticipation = challenge.participants.find((p) => p.userId === userId);
+    const myRank = myParticipation
+      ? leaderboard.findIndex((p) => p.userId === userId) + 1
+      : null;
 
     res.json({
-      challenge: {
-        id: challenge.id,
-        title: challenge.title,
-        description: challenge.description,
-        type: challenge.type,
-        status: challenge.status,
-        targetValue: challenge.targetValue,
-        targetUnit: challenge.targetUnit,
-        exerciseName: challenge.exerciseName,
-        startDate: challenge.startDate,
-        endDate: challenge.endDate,
-        xpReward: challenge.xpReward,
-        creator: challenge.creator,
-        participantsCount: challenge.participants.length,
-      },
-      leaderboard,
-      isJoined: leaderboard.some((p) => p.isMe),
-    })
+      ...challenge,
+      participants: leaderboard,
+      isJoined: !!myParticipation,
+      myProgress: myParticipation
+        ? {
+            currentValue: myParticipation.currentValue,
+            isWinner: myParticipation.isWinner,
+            rank: myRank,
+          }
+        : null,
+      participantsCount: challenge._count.participants,
+    });
   } catch (error) {
-    res.status(500).json({ error: "Error al obtener challenge" })
+    res.status(500).json({ error: "Error al obtener challenge" });
   }
-})
+});
 
-// ═══════════════════════════════════════════════════════
-//  GLOBAL LEADERBOARDS
-// ═══════════════════════════════════════════════════════
-
-// GET /api/challenges/leaderboard/global
-router.get("/leaderboard/global", async (req: Request, res: Response) => {
+// ─── POST /api/challenges ─────────────────────────────
+router.post("/", async (req: Request, res: Response) => {
   try {
-    const period = req.query.period as string // "week", "month", "alltime"
+    const { userId: clerkId } = getAuth(req);
+    const userId = await getPrismaUserId(clerkId!);
+    if (!userId) { res.status(401).json({ error: "No autorizado" }); return; }
 
-    let dateFilter: Date | undefined
-    if (period === "week") {
-      dateFilter = new Date()
-      dateFilter.setDate(dateFilter.getDate() - 7)
-    } else if (period === "month") {
-      dateFilter = new Date()
-      dateFilter.setMonth(dateFilter.getMonth() - 1)
+    const { title, description, type, goal, unit, startDate, endDate, isPublic, maxParticipants, xpReward } = req.body;
+
+    if (!title || !type || goal == null || !startDate || !endDate || !unit) {
+      res.status(400).json({ error: "Faltan campos requeridos: title, type, goal, unit, startDate, endDate" });
+      return;
     }
 
-    // Leaderboard por XP
-    const xpLeaderboard = await prisma.user.findMany({
-      select: {
-        id: true, name: true, username: true, avatarUrl: true,
-        xp: true, level: true, streak: true,
+    const challenge = await prisma.challenge.create({
+      data: {
+        creatorId: userId,
+        title,
+        description: description || null,
+        type,
+        status: "ACTIVE",
+        goal: Number(goal),
+        unit,
+        startDate: new Date(startDate),
+        endDate: new Date(endDate),
+        isPublic: isPublic ?? true,
+        maxParticipants: maxParticipants ? Number(maxParticipants) : null,
+        xpReward: xpReward ? Number(xpReward) : 100,
       },
-      orderBy: { xp: "desc" },
-      take: 50,
-    })
+    });
 
-    // Leaderboard por volumen (si hay filtro de fecha)
-    let volumeLeaderboard: any[] = []
-    if (dateFilter) {
-      const volumeData = await prisma.workout.groupBy({
-        by: ["userId"],
-        where: {
-          isCompleted: true,
-          startTime: { gte: dateFilter },
-        },
-        _sum: { totalVolume: true },
-        _count: true,
-        orderBy: { _sum: { totalVolume: "desc" } },
-        take: 50,
-      })
+    // El creador se une automáticamente
+    await prisma.challengeParticipant.create({
+      data: { challengeId: challenge.id, userId },
+    });
 
-      // Enriquecer con datos del usuario
-      const userIds = volumeData.map((v) => v.userId)
-      const users = await prisma.user.findMany({
-        where: { id: { in: userIds } },
-        select: { id: true, name: true, username: true, avatarUrl: true, level: true },
-      })
-      const userMap = new Map(users.map((u) => [u.id, u]))
+    // +15 XP por crear un challenge
+    await prisma.user.update({
+      where: { id: userId },
+      data: { xp: { increment: 15 } },
+    });
 
-      volumeLeaderboard = volumeData.map((v, idx) => ({
-        rank: idx + 1,
-        ...userMap.get(v.userId),
-        totalVolume: Math.round(v._sum.totalVolume || 0),
-        workoutCount: v._count,
-      }))
-    }
-
-    // Leaderboard por streaks
-    const streakLeaderboard = await prisma.user.findMany({
-      where: { streak: { gt: 0 } },
-      select: {
-        id: true, name: true, username: true, avatarUrl: true,
-        streak: true, level: true,
-      },
-      orderBy: { streak: "desc" },
-      take: 20,
-    })
-
-    res.json({
-      xp: xpLeaderboard.map((u, i) => ({ rank: i + 1, ...u })),
-      volume: volumeLeaderboard,
-      streak: streakLeaderboard.map((u, i) => ({ rank: i + 1, ...u })),
-    })
+    res.status(201).json(challenge);
   } catch (error) {
-    console.error("Leaderboard error:", error)
-    res.status(500).json({ error: "Error al obtener leaderboard" })
+    console.error("POST /challenges error:", error);
+    res.status(500).json({ error: "Error al crear challenge" });
   }
-})
+});
 
-export default router
+// ─── POST /api/challenges/:id/join ────────────────────
+router.post("/:id/join", async (req: Request, res: Response) => {
+  try {
+    const { userId: clerkId } = getAuth(req);
+    const userId = await getPrismaUserId(clerkId!);
+    if (!userId) { res.status(401).json({ error: "No autorizado" }); return; }
+
+    const id = req.params.id as string;
+
+    const [challenge, participantCount] = await Promise.all([
+      prisma.challenge.findUnique({ where: { id } }),
+      prisma.challengeParticipant.count({ where: { challengeId: id } }),
+    ]);
+
+    if (!challenge) { res.status(404).json({ error: "Challenge no encontrado" }); return; }
+    if (challenge.status !== "ACTIVE") { res.status(400).json({ error: "El challenge no está activo" }); return; }
+    if (challenge.endDate < new Date()) { res.status(400).json({ error: "El challenge ya terminó" }); return; }
+
+    if (challenge.maxParticipants && participantCount >= challenge.maxParticipants) {
+      res.status(400).json({ error: "El challenge está lleno" });
+      return;
+    }
+
+    const participation = await prisma.challengeParticipant.create({
+      data: { challengeId: id, userId },
+    });
+
+    // Notify challenge creator that someone joined
+    if (challenge.creatorId !== userId) {
+      const joiner = await prisma.user.findUnique({ where: { id: userId }, select: { name: true } });
+      const joinTitle = `${joiner?.name || "Alguien"} se unió a tu reto "${challenge.title}"`;
+      await prisma.notification.create({
+        data: {
+          userId: challenge.creatorId,
+          fromId: userId,
+          type: "challenge_invite",
+          title: joinTitle,
+          data: { challengeId: id },
+        },
+      });
+      sendPushToUser(challenge.creatorId, "Nuevo participante", joinTitle, { type: "challenge_join", challengeId: id });
+    }
+
+    res.status(201).json(participation);
+  } catch (error: any) {
+    // P2002 = violación del @@unique([challengeId, userId])
+    if (error?.code === "P2002") {
+      res.status(400).json({ error: "Ya estás participando en este challenge" });
+      return;
+    }
+    res.status(500).json({ error: "Error al unirse al challenge" });
+  }
+});
+
+// ─── POST /api/challenges/:id/leave ───────────────────
+router.post("/:id/leave", async (req: Request, res: Response) => {
+  try {
+    const { userId: clerkId } = getAuth(req);
+    const userId = await getPrismaUserId(clerkId!);
+    if (!userId) { res.status(401).json({ error: "No autorizado" }); return; }
+
+    const id = req.params.id as string;
+
+    await prisma.challengeParticipant.delete({
+      where: {
+        // Prisma genera este nombre compuesto del @@unique
+        challengeId_userId: { challengeId: id, userId },
+      },
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: "Error al salir del challenge" });
+  }
+});
+
+export default router;

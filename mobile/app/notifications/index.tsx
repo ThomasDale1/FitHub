@@ -15,6 +15,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useState, useCallback, useEffect } from "react";
 import { router } from "expo-router";
 import { socialAPI } from "@/lib/api";
+import { setBadgeCount } from "@/lib/notifications";
 
 // Notification type → icon + color mapping
 const NOTIF_CONFIG: Record<string, { icon: keyof typeof Ionicons.glyphMap; color: string }> = {
@@ -22,6 +23,7 @@ const NOTIF_CONFIG: Record<string, { icon: keyof typeof Ionicons.glyphMap; color
   reaction: { icon: "heart", color: "#FF6B6B" },
   comment: { icon: "chatbubble", color: "#00D48A" },
   challenge_invite: { icon: "flag", color: "#FF6B35" },
+  challenge_join: { icon: "people", color: "#FF6B35" },
   badge: { icon: "ribbon", color: "#F59E0B" },
   milestone: { icon: "star", color: "#F59E0B" },
   level_up: { icon: "arrow-up-circle", color: "#6C63FF" },
@@ -49,8 +51,9 @@ export default function NotificationsScreen() {
     try {
       const res = await socialAPI.getNotifications();
       setNotifications(res.data.notifications);
-      // Mark as read
+      // Mark as read + clear app badge
       await socialAPI.markNotificationsRead();
+      setBadgeCount(0);
     } catch (err) {
       console.error("Notifications error:", err);
     } finally {
@@ -67,6 +70,27 @@ export default function NotificationsScreen() {
     await fetchNotifications();
     setRefreshing(false);
   }, [fetchNotifications]);
+
+  const handleNotifTap = (notif: any) => {
+    switch (notif.type) {
+      case "follow":
+        router.push("/(tabs)/social");
+        break;
+      case "reaction":
+      case "comment":
+        router.push("/(tabs)/social");
+        break;
+      case "badge":
+        router.push("/(tabs)/profile");
+        break;
+      case "challenge_invite":
+      case "challenge_join":
+        router.push("/(tabs)/social");
+        break;
+      default:
+        break;
+    }
+  };
 
   return (
     <SafeAreaView className="flex-1 bg-background">
@@ -99,8 +123,10 @@ export default function NotificationsScreen() {
             {notifications.map((notif) => {
               const config = NOTIF_CONFIG[notif.type] || NOTIF_CONFIG.system;
               return (
-                <View
+                <TouchableOpacity
                   key={notif.id}
+                  activeOpacity={0.7}
+                  onPress={() => handleNotifTap(notif)}
                   className={`flex-row items-start gap-x-3 py-3 border-b border-background-elevated ${
                     !notif.isRead ? "opacity-100" : "opacity-60"
                   }`}
@@ -125,7 +151,7 @@ export default function NotificationsScreen() {
                   {!notif.isRead && (
                     <View className="bg-primary rounded-full w-2 h-2 mt-2" />
                   )}
-                </View>
+                </TouchableOpacity>
               );
             })}
           </View>

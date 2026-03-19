@@ -6,6 +6,7 @@ import { Router, Request, Response } from "express"
 import { prisma } from "../lib/prisma.js"
 import { requireAuth } from "../middleware/auth.js"
 import { getAuth } from "@clerk/express"
+import { sendPushToUser } from "../lib/pushNotifications.js"
 
 const router = Router()
 router.use(requireAuth)
@@ -42,16 +43,18 @@ router.post("/follow", async (req: Request, res: Response) => {
       // Ya existe, ignorar
     })
 
-    // Notificación
+    // Notificación in-app + push
+    const followTitle = `${user.name} te empezó a seguir`
     await prisma.notification.create({
       data: {
         userId: targetUserId,
         fromId: user.id,
         type: "follow",
-        title: `${user.name} te empezó a seguir`,
+        title: followTitle,
         data: { followerId: user.id },
       },
     })
+    sendPushToUser(targetUserId, "Nuevo seguidor", followTitle, { type: "follow", userId: user.id })
 
     // XP por interacción social
     await prisma.user.update({
@@ -386,15 +389,17 @@ router.post("/react", async (req: Request, res: Response) => {
       const reactionEmojis: Record<string, string> = {
         FIRE: "🔥", MUSCLE: "💪", CLAP: "👏", TROPHY: "🏆", TARGET: "🎯",
       }
+      const reactionTitle = `${user.name} reaccionó ${reactionEmojis[type] || ""} a tu post`
       await prisma.notification.create({
         data: {
           userId: post.userId,
           fromId: user.id,
           type: "reaction",
-          title: `${user.name} reaccionó ${reactionEmojis[type] || ""} a tu post`,
+          title: reactionTitle,
           data: { postId },
         },
       })
+      sendPushToUser(post.userId, "Nueva reacción", reactionTitle, { type: "reaction", postId })
     }
 
     // XP
@@ -447,16 +452,18 @@ router.post("/comments", async (req: Request, res: Response) => {
     })
 
     if (post && post.userId !== user.id) {
+      const commentTitle = `${user.name} comentó en tu post`
       await prisma.notification.create({
         data: {
           userId: post.userId,
           fromId: user.id,
           type: "comment",
-          title: `${user.name} comentó en tu post`,
+          title: commentTitle,
           body: content.trim().substring(0, 100),
           data: { postId, commentId: comment.id },
         },
       })
+      sendPushToUser(post.userId, "Nuevo comentario", commentTitle, { type: "comment", postId })
     }
 
     // XP
