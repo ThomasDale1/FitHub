@@ -130,21 +130,21 @@ function PostCard({
             {post.workoutData.name}
           </Text>
           <View className="flex-row gap-x-4">
-            {post.workoutData.duration && (
+            {post.workoutData.duration ? (
               <Text className="text-text-secondary text-xs">
                 ⏱ {post.workoutData.duration} min
               </Text>
-            )}
-            {post.workoutData.totalVolume && (
+            ) : null}
+            {post.workoutData.totalVolume ? (
               <Text className="text-text-secondary text-xs">
                 🏋️ {Math.round(post.workoutData.totalVolume)} kg
               </Text>
-            )}
-            {post.workoutData.xpEarned && (
+            ) : null}
+            {post.workoutData.xpEarned ? (
               <Text className="text-text-secondary text-xs">
                 ⭐ +{post.workoutData.xpEarned} XP
               </Text>
-            )}
+            ) : null}
           </View>
         </View>
       )}

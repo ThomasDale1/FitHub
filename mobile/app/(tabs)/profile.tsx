@@ -22,6 +22,7 @@ import { useState, useCallback } from "react";
 import { router } from "expo-router";
 import { useProfile, useUserStats } from "@/hooks/useUserData";
 import XPBar from "@/components/XPBar";
+import { api } from "@/lib/api";
 
 // ─── Stat Item Component ─────────────────────────────
 function ProfileStat({
@@ -624,6 +625,21 @@ export default function ProfileScreen() {
                 : "—"}
             </Text>
           </View>
+
+          {/* ─── TEST PUSH (temporal) ────────────────── */}
+          <TouchableOpacity
+            className="bg-primary/20 border border-primary/40 rounded-2xl py-3 mt-6 items-center"
+            onPress={async () => {
+              try {
+                const res = await api.post("/api/push-token/test");
+                Alert.alert("Push enviado", `Tokens encontrados: ${res.data.tokensFound}`);
+              } catch (err: any) {
+                Alert.alert("Error", err.message);
+              }
+            }}
+          >
+            <Text className="text-primary font-bold">🔔 Test Push Notification</Text>
+          </TouchableOpacity>
 
           {/* ─── VERSION INFO ──────────────────────── */}
           <Text className="text-text-muted text-xs text-center mt-6">
