@@ -7,6 +7,7 @@ import {
   calculateWorkoutXP,
 } from "../lib/muscleStimulus.js"
 import { sendPushToUser } from "../lib/pushNotifications.js"
+import { updateChallengeProgress } from "../lib/challengeProgress.js"
 
 const router = Router()
 router.use(requireAuth)
@@ -344,6 +345,13 @@ router.post("/:id/finish", async (req: Request, res: Response) => {
       `${workout.name} — ${durationMinutes} min, +${xpEarned} XP${prText}`,
       { type: "workout_complete", workoutId }
     )
+
+    // ─── AUTO-PROGRESS CHALLENGES ──────────────────
+    // Non-blocking: actualiza progreso de challenges activos
+    updateChallengeProgress({
+      userId: userId!,
+      workout: { totalVolume, newPRs, durationMinutes },
+    })
 
     res.json({
       workout: finishedWorkout,

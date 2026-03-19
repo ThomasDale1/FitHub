@@ -6,6 +6,7 @@ import { Router, Request, Response } from "express"
 import { prisma } from "../lib/prisma.js"
 import { requireAuth } from "../middleware/auth.js"
 import { getAuth } from "@clerk/express"
+import { updateChallengeProgress } from "../lib/challengeProgress.js"
 
 const router = Router()
 router.use(requireAuth)
@@ -122,6 +123,13 @@ router.post("/sync", async (req: Request, res: Response) => {
         data: { xp: { increment: stepXP } },
       })
     }
+
+    // ─── AUTO-PROGRESS CHALLENGES (DISTANCE) ──────
+    // Non-blocking: actualiza challenges de tipo DISTANCE
+    updateChallengeProgress({
+      userId: user.id,
+      steps: { totalDistanceKm: distanceKm },
+    })
 
     res.json({
       ...dailySteps,
