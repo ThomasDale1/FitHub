@@ -6,6 +6,7 @@ import { Router, Request, Response } from "express";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
 import { getAuth } from "@clerk/express";
+import { sendPushToUser } from "../lib/pushNotifications.js";
 
 const router = Router();
 router.use(requireAuth);
@@ -55,6 +56,34 @@ router.delete("/", async (req: Request, res: Response) => {
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: "Error al eliminar push token" });
+  }
+});
+
+// POST /api/push-token/test — Send a test push to yourself
+router.post("/test", async (req: Request, res: Response) => {
+  try {
+    const { userId: clerkId } = getAuth(req);
+    const user = await getUserByClerkId(clerkId!);
+    if (!user) { res.status(404).json({ error: "Usuario no encontrado" }); return; }
+
+    // Check if user has tokens
+    const tokens = await prisma.pushToken.findMany({
+      where: { userId: user.id },
+      select: { token: true, platform: true },
+    });
+    console.log(`🔔 [Test Push] User ${user.id} has ${tokens.length} token(s):`, tokens);
+
+    await sendPushToUser(
+      user.id,
+      "🏋️ Test Notification",
+      "Si ves esto, las push notifications funcionan!",
+      { type: "system" }
+    );
+
+    res.json({ success: true, tokensFound: tokens.length });
+  } catch (error) {
+    console.error("Test push error:", error);
+    res.status(500).json({ error: "Error al enviar test push" });
   }
 });
 
