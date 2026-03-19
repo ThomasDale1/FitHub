@@ -17,12 +17,18 @@ export function useNotifications() {
 
   useEffect(() => {
     // Register for push notifications
+    console.log("🔔 [Push] Starting registration...");
     registerForPushNotifications().then((token) => {
+      console.log("🔔 [Push] Token result:", token ? token.substring(0, 30) + "..." : "NULL");
       if (token) {
         setExpoPushToken(token);
-        savePushTokenToBackend(token);
+        savePushTokenToBackend(token)
+          .then(() => console.log("🔔 [Push] Token saved to backend ✅"))
+          .catch((err) => console.error("🔔 [Push] Failed to save token:", err));
+      } else {
+        console.warn("🔔 [Push] No token obtained — check permissions or device");
       }
-    });
+    }).catch((err) => console.error("🔔 [Push] Registration error:", err));
 
     // Listener: notification received while app is in foreground
     notificationListener.current = Notifications.addNotificationReceivedListener(

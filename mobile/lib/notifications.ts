@@ -26,22 +26,24 @@ Notifications.setNotificationHandler({
 export async function registerForPushNotifications(): Promise<string | null> {
   // Push only works on physical devices
   if (!Device.isDevice) {
-    console.log("Push notifications require a physical device");
+    console.log("🔔 [Push] Not a physical device — skipping");
     return null;
   }
 
   // Check existing permissions
   const { status: existingStatus } = await Notifications.getPermissionsAsync();
+  console.log("🔔 [Push] Existing permission status:", existingStatus);
   let finalStatus = existingStatus;
 
   // Request if not already granted
   if (existingStatus !== "granted") {
     const { status } = await Notifications.requestPermissionsAsync();
     finalStatus = status;
+    console.log("🔔 [Push] Requested permission, got:", finalStatus);
   }
 
   if (finalStatus !== "granted") {
-    console.log("Push notification permission denied");
+    console.log("🔔 [Push] Permission DENIED");
     return null;
   }
 
@@ -57,9 +59,11 @@ export async function registerForPushNotifications(): Promise<string | null> {
 
   // Get the Expo push token
   const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+  console.log("🔔 [Push] ProjectId:", projectId);
   const tokenData = await Notifications.getExpoPushTokenAsync({
     projectId,
   });
+  console.log("🔔 [Push] Got token:", tokenData.data);
 
   return tokenData.data;
 }

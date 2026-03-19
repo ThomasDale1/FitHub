@@ -37,7 +37,7 @@ function SocialTabIcon({ color, size }: { color: string; size: number }) {
   return (
     <View>
       <Ionicons name="people" size={size} color={color} />
-      {unreadCount > 0 && (
+      {unreadCount > 0 ? (
         <View
           style={{
             position: "absolute",
@@ -53,10 +53,10 @@ function SocialTabIcon({ color, size }: { color: string; size: number }) {
           }}
         >
           <Text style={{ color: "#FFF", fontSize: 9, fontWeight: "800" }}>
-            {unreadCount > 99 ? "99+" : unreadCount}
+            {unreadCount > 99 ? "99+" : String(unreadCount)}
           </Text>
         </View>
-      )}
+      ) : null}
     </View>
   );
 }

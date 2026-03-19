@@ -58,6 +58,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "556521cc-0666-4752-91dc-50fdca5e9b30"
+      }
+    },
+    "owner": "thomasdale"
   }
 }
