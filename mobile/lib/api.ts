@@ -253,8 +253,8 @@ export interface ChallengeData {
   title: string;
   description: string | null;
   type: string;
+  mode: "MILESTONE" | "TIMED";
   status: string;
-  // ← goal y unit son los campos reales del schema
   goal: number;
   unit: string;
   startDate: string;
@@ -542,6 +542,7 @@ export const challengesAPI = {
     title: string;
     description?: string;
     type: string;
+    mode?: "MILESTONE" | "TIMED";
     goal: number;
     unit: string;
     startDate: string;
