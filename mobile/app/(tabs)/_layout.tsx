@@ -4,6 +4,8 @@ import { useAuth } from "@clerk/clerk-expo";
 import { useEffect, useState, useCallback } from "react";
 import { setGetTokenFn, socialAPI } from "@/lib/api";
 import { useNotifications } from "@/hooks/useNotifications";
+import { initStepTracking } from "@/lib/stepTracker";
+import { registerBackgroundNotificationHandler } from "@/lib/notifications";
 import { View, Text } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 
@@ -67,6 +69,9 @@ export default function TabsLayout() {
   // Configurar el token function una sola vez
   useEffect(() => {
     setGetTokenFn(getToken);
+    // Init step tracking y background notifications DESPUÉS de auth
+    initStepTracking();
+    registerBackgroundNotificationHandler();
   }, [getToken]);
 
   // Initialize push notifications

@@ -10,42 +10,11 @@ import * as BackgroundTask from "expo-background-task"
 import * as TaskManager from "expo-task-manager"
 import { Pedometer } from "expo-sensors"
 import { AppState, type AppStateStatus } from "react-native"
-import { api, BG_AUTH_TOKEN_KEY } from "./api"
+import { stepsAPI, api, BG_AUTH_TOKEN_KEY } from "./api"
 import * as SecureStore from "expo-secure-store"
 
 // ─── Task names ──────────────────────────────────────
 export const STEP_SYNC_TASK = "STEP_SYNC_BACKGROUND_TASK"
-
-// ─── Helper: get auth token for background requests ──
-async function getBackgroundAuthToken(): Promise<string | null> {
-  try {
-    // Token persistido por el interceptor de api.ts en cada request
-    const token = await SecureStore.getItemAsync(BG_AUTH_TOKEN_KEY)
-    return token
-  } catch {
-    return null
-  }
-}
-
-// ─── Helper: sync steps to backend ───────────────────
-async function syncStepsToBackend(steps: number): Promise<boolean> {
-  try {
-    const token = await getBackgroundAuthToken()
-    if (!token || steps <= 0) return false
-
-    const localDate = new Date().toLocaleDateString("en-CA")
-    await api.post(
-      "/api/steps/sync",
-      { steps, date: localDate },
-      { headers: { Authorization: `Bearer ${token}` } }
-    )
-    console.log(`🦶 [BG] Synced ${steps} steps`)
-    return true
-  } catch (err) {
-    console.error("🦶 [BG] Sync failed:", err)
-    return false
-  }
-}
 
 // ─── Helper: get steps since midnight ────────────────
 async function getStepsSinceMidnight(): Promise<number> {
@@ -63,6 +32,44 @@ async function getStepsSinceMidnight(): Promise<number> {
   }
 }
 
+// ─── Foreground sync: usa el interceptor de api (ya tiene token) ──
+async function syncStepsForeground(steps: number): Promise<boolean> {
+  try {
+    if (steps <= 0) return false
+    await stepsAPI.syncSteps(steps)
+    console.log(`🦶 [FG] Synced ${steps} steps`)
+    return true
+  } catch (err) {
+    console.error("🦶 [FG] Sync failed:", err)
+    return false
+  }
+}
+
+// ─── Background sync: usa token de SecureStore ───────
+async function syncStepsBackground(steps: number): Promise<boolean> {
+  try {
+    if (steps <= 0) return false
+
+    const token = await SecureStore.getItemAsync(BG_AUTH_TOKEN_KEY)
+    if (!token) {
+      console.log("🦶 [BG] No auth token available, skipping sync")
+      return false
+    }
+
+    const localDate = new Date().toLocaleDateString("en-CA")
+    await api.post(
+      "/api/steps/sync",
+      { steps, date: localDate },
+      { headers: { Authorization: `Bearer ${token}` } }
+    )
+    console.log(`🦶 [BG] Synced ${steps} steps`)
+    return true
+  } catch (err) {
+    console.error("🦶 [BG] Sync failed:", err)
+    return false
+  }
+}
+
 // ═══════════════════════════════════════════════════════
 // DEFINE BACKGROUND TASK (must be in global scope)
 // ═══════════════════════════════════════════════════════
@@ -70,7 +77,7 @@ TaskManager.defineTask(STEP_SYNC_TASK, async () => {
   try {
     const steps = await getStepsSinceMidnight()
     if (steps > 0) {
-      const success = await syncStepsToBackend(steps)
+      const success = await syncStepsBackground(steps)
       if (success) {
         return BackgroundTask.BackgroundTaskResult.Success
       }
@@ -85,16 +92,11 @@ TaskManager.defineTask(STEP_SYNC_TASK, async () => {
 // ═══════════════════════════════════════════════════════
 // REGISTER / UNREGISTER
 // ═══════════════════════════════════════════════════════
-
-/**
- * Registra la tarea de background para sincronizar pasos periódicamente.
- * Minimum interval en iOS/Android es 15 minutos.
- */
 export async function registerStepSyncTask(): Promise<void> {
   try {
     const status = await BackgroundTask.getStatusAsync()
     if (status === BackgroundTask.BackgroundTaskStatus.Restricted) {
-      console.log("🦶 [BG] Background tasks restricted on this device")
+      console.log("🦶 [BG] Background tasks restricted (normal on Expo Go)")
       return
     }
 
@@ -105,7 +107,7 @@ export async function registerStepSyncTask(): Promise<void> {
     }
 
     await BackgroundTask.registerTaskAsync(STEP_SYNC_TASK, {
-      minimumInterval: 15, // 15 minutes minimum
+      minimumInterval: 15,
     })
     console.log("🦶 [BG] Step sync task registered (every ~15 min)")
   } catch (error) {
@@ -127,26 +129,24 @@ export async function unregisterStepSyncTask(): Promise<void> {
 
 // ═══════════════════════════════════════════════════════
 // FOREGROUND SYNC — AppState listener
-// Sincroniza inmediatamente cuando la app vuelve al foreground
 // ═══════════════════════════════════════════════════════
 let appStateSubscription: ReturnType<typeof AppState.addEventListener> | null = null
 let lastForegroundSync = 0
 
 export function startForegroundSyncListener(): void {
-  if (appStateSubscription) return // Ya está activo
+  if (appStateSubscription) return
 
   appStateSubscription = AppState.addEventListener(
     "change",
     async (nextState: AppStateStatus) => {
       if (nextState === "active") {
-        // Throttle: no sincronizar más de una vez cada 30 segundos
         const now = Date.now()
         if (now - lastForegroundSync < 30000) return
         lastForegroundSync = now
 
         const steps = await getStepsSinceMidnight()
         if (steps > 0) {
-          await syncStepsToBackend(steps)
+          await syncStepsForeground(steps)
         }
       }
     }
@@ -162,19 +162,19 @@ export function stopForegroundSyncListener(): void {
 }
 
 // ═══════════════════════════════════════════════════════
-// INIT — call once on app startup
+// INIT — call once after auth is ready
 // ═══════════════════════════════════════════════════════
 export async function initStepTracking(): Promise<void> {
-  // 1. Register background task
+  // 1. Register background task (silently fails on Expo Go)
   await registerStepSyncTask()
 
   // 2. Start foreground sync listener
   startForegroundSyncListener()
 
-  // 3. Immediate sync on init
+  // 3. Immediate sync on init (uses api interceptor which has token)
   const steps = await getStepsSinceMidnight()
   if (steps > 0) {
-    await syncStepsToBackend(steps)
+    await syncStepsForeground(steps)
   }
 }
 
