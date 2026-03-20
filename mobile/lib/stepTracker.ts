@@ -10,18 +10,17 @@ import * as BackgroundTask from "expo-background-task"
 import * as TaskManager from "expo-task-manager"
 import { Pedometer } from "expo-sensors"
 import { AppState, type AppStateStatus } from "react-native"
-import { api } from "./api"
+import { api, BG_AUTH_TOKEN_KEY } from "./api"
 import * as SecureStore from "expo-secure-store"
 
 // ─── Task names ──────────────────────────────────────
 export const STEP_SYNC_TASK = "STEP_SYNC_BACKGROUND_TASK"
-export const NOTIFICATION_BACKGROUND_TASK = "NOTIFICATION_BACKGROUND_TASK"
 
 // ─── Helper: get auth token for background requests ──
 async function getBackgroundAuthToken(): Promise<string | null> {
   try {
-    // Clerk stores the session token in SecureStore
-    const token = await SecureStore.getItemAsync("__clerk_client_jwt")
+    // Token persistido por el interceptor de api.ts en cada request
+    const token = await SecureStore.getItemAsync(BG_AUTH_TOKEN_KEY)
     return token
   } catch {
     return null

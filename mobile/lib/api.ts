@@ -13,6 +13,11 @@ export const api = axios.create({
 
 // ─── Auth interceptor automático ─────────────────────
 // Inyecta el token en cada request automáticamente
+// También persiste el token en SecureStore para background tasks
+import * as SecureStore from "expo-secure-store";
+
+export const BG_AUTH_TOKEN_KEY = "fithub_bg_auth_token";
+
 let getTokenFn: (() => Promise<string | null>) | null = null;
 
 export const setGetTokenFn = (fn: () => Promise<string | null>) => {
@@ -25,6 +30,8 @@ api.interceptors.request.use(async (config) => {
       const token = await getTokenFn();
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
+        // Persistir para uso en background tasks
+        SecureStore.setItemAsync(BG_AUTH_TOKEN_KEY, token).catch(() => {});
       }
     } catch {}
   }
