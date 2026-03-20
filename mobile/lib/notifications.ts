@@ -1,12 +1,30 @@
 // ─────────────────────────────────────────────────────
 // mobile/lib/notifications.ts
 // Push notification setup, permissions, and token mgmt
+// Background notification handling via TaskManager
 // ─────────────────────────────────────────────────────
 import * as Notifications from "expo-notifications";
 import * as Device from "expo-device";
+import * as TaskManager from "expo-task-manager";
 import Constants from "expo-constants";
 import { Platform } from "react-native";
 import { api } from "./api";
+
+// ─── Background notification task name ───────────────
+export const BACKGROUND_NOTIFICATION_TASK = "BACKGROUND_NOTIFICATION_TASK";
+
+// ─── Define background notification handler ──────────
+// Runs when a push notification arrives while app is killed/background
+TaskManager.defineTask(BACKGROUND_NOTIFICATION_TASK, async ({ data, error }) => {
+  if (error) {
+    console.error("🔔 [BG Notification] Error:", error);
+    return;
+  }
+  // data contains the notification payload
+  // The OS already shows the notification — here we can do silent processing
+  // like updating badge count, pre-fetching data, etc.
+  console.log("🔔 [BG Notification] Received:", data);
+});
 
 // Configure how notifications appear when app is in foreground
 Notifications.setNotificationHandler({
@@ -98,4 +116,23 @@ export async function removePushTokenFromBackend(token: string): Promise<void> {
  */
 export async function setBadgeCount(count: number): Promise<void> {
   await Notifications.setBadgeCountAsync(count);
+}
+
+/**
+ * Register background notification handler.
+ * Allows processing notifications when app is killed/background.
+ */
+export async function registerBackgroundNotificationHandler(): Promise<void> {
+  try {
+    const isRegistered = await TaskManager.isTaskRegisteredAsync(
+      BACKGROUND_NOTIFICATION_TASK
+    );
+    if (!isRegistered) {
+      await Notifications.registerTaskAsync(BACKGROUND_NOTIFICATION_TASK);
+      console.log("🔔 [BG] Background notification handler registered");
+    }
+  } catch (err) {
+    // Silently fail — not all environments support this
+    console.log("🔔 [BG] Background notification handler not supported:", err);
+  }
 }

@@ -17,8 +17,10 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useState, useCallback, useEffect, useRef } from "react";
+import { AppState, type AppStateStatus } from "react-native";
 import { stepsAPI, type WeekDayData } from "@/lib/api";
 import { Pedometer } from "expo-sensors";
+import { getStepsSinceMidnight } from "@/lib/stepTracker";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const RING_SIZE = SCREEN_WIDTH * 0.6;
@@ -274,24 +276,19 @@ export default function StepsScreen() {
       setPedometerAvailable(available);
 
       if (available) {
-        // Obtener pasos acumulados desde medianoche local
-        const midnight = new Date();
-        midnight.setHours(0, 0, 0, 0);
-
         try {
-          const result = await Pedometer.getStepCountAsync(midnight, new Date());
-          initialStepsRef.current = result.steps;
-          setLiveSteps(result.steps);
-          // Sync inmediato al montar (sin esperar el primer intervalo de 60s)
-          if (result.steps > 0) {
-            stepsAPI.syncSteps(result.steps).catch(() => {});
+          const steps = await getStepsSinceMidnight();
+          initialStepsRef.current = steps;
+          setLiveSteps(steps);
+          if (steps > 0) {
+            stepsAPI.syncSteps(steps).catch(() => {});
           }
         } catch (err) {
           console.log("Error getting step count:", err);
         }
 
-        // watchStepCount en iOS devuelve pasos ACUMULADOS desde que inició
-        // la suscripción (no incrementales), por eso usamos initialSteps + result.steps
+        // watchStepCount devuelve pasos ACUMULADOS desde que inició
+        // la suscripción, por eso usamos initialSteps + result.steps
         subscriptionRef.current = Pedometer.watchStepCount((result) => {
           setLiveSteps(initialStepsRef.current + result.steps);
         });
@@ -306,6 +303,34 @@ export default function StepsScreen() {
       }
     };
   }, []);
+
+  // ─── Refresh steps cuando la app vuelve al foreground ─
+  useEffect(() => {
+    const subscription = AppState.addEventListener(
+      "change",
+      async (nextState: AppStateStatus) => {
+        if (nextState === "active" && pedometerAvailable) {
+          // Re-leer pasos reales del sensor al volver
+          const steps = await getStepsSinceMidnight();
+          if (steps > liveSteps) {
+            initialStepsRef.current = steps;
+            setLiveSteps(steps);
+            // Re-suscribir el watcher para que acumule desde el nuevo base
+            if (subscriptionRef.current) {
+              subscriptionRef.current.remove();
+            }
+            subscriptionRef.current = Pedometer.watchStepCount((result) => {
+              setLiveSteps(steps + result.steps);
+            });
+          }
+          // Refresh backend data too
+          fetchData();
+        }
+      }
+    );
+
+    return () => subscription.remove();
+  }, [pedometerAvailable, liveSteps, fetchData]);
 
   // ─── Sync al backend cada 60 segundos ─────────────
   useEffect(() => {

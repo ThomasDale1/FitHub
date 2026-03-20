@@ -10,9 +10,15 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.fithub.app"
+      "bundleIdentifier": "com.fithub.app",
+      "infoPlist": {
+        "NSMotionUsageDescription": "FitHub necesita acceso al sensor de movimiento para contar tus pasos automáticamente."
+      }
     },
     "android": {
+      "permissions": [
+        "android.permission.ACTIVITY_RECOGNITION"
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#0F0F1A",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -53,7 +59,8 @@
           "defaultChannel": "default",
           "sounds": []
         }
-      ]
+      ],
+      "expo-background-task"
     ],
     "experiments": {
       "typedRoutes": true,
