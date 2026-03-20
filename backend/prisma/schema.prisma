@@ -245,6 +245,11 @@ enum ChallengeType {
   CUSTOM
 }
 
+enum ChallengeMode {
+  MILESTONE   // Carrera: el primero que llega al goal gana
+  TIMED       // Competencia: al terminar el tiempo, el mejor puntaje gana
+}
+
 enum ChallengeStatus {
   PENDING
   ACTIVE
@@ -492,6 +497,7 @@ model Challenge {
   title       String
   description String?
   type        ChallengeType
+  mode        ChallengeMode   @default(MILESTONE)
   status      ChallengeStatus @default(PENDING)
 
   goal            Float           // la meta numérica: ej 10000 kg

@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import { getAuth } from "@clerk/express";
 import { prisma } from "../lib/prisma.js";
 import { sendPushToUser } from "../lib/pushNotifications.js";
+import { finalizeExpiredChallenges } from "../lib/challengeProgress.js";
 
 const router = Router();
 
@@ -21,6 +22,11 @@ router.get("/", async (req: Request, res: Response) => {
     const { userId: clerkId } = getAuth(req);
     const userId = await getPrismaUserId(clerkId!);
     if (!userId) { res.status(401).json({ error: "No autorizado" }); return; }
+
+    // Finalizar challenges expirados antes de listar
+    finalizeExpiredChallenges().catch((err: unknown) =>
+      console.error("Finalize expired (non-blocking):", err)
+    );
 
     const { filter = "active" } = req.query;
     const now = new Date();
@@ -229,7 +235,7 @@ router.post("/", async (req: Request, res: Response) => {
     const userId = await getPrismaUserId(clerkId!);
     if (!userId) { res.status(401).json({ error: "No autorizado" }); return; }
 
-    const { title, description, type, goal, unit, startDate, endDate, isPublic, maxParticipants, xpReward } = req.body;
+    const { title, description, type, mode, goal, unit, startDate, endDate, isPublic, maxParticipants, xpReward } = req.body;
 
     if (!title || !type || goal == null || !startDate || !endDate || !unit) {
       res.status(400).json({ error: "Faltan campos requeridos: title, type, goal, unit, startDate, endDate" });
@@ -242,6 +248,7 @@ router.post("/", async (req: Request, res: Response) => {
         title,
         description: description || null,
         type,
+        mode: mode || "MILESTONE",
         status: "ACTIVE",
         goal: Number(goal),
         unit,
