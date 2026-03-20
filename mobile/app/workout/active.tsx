@@ -6,6 +6,8 @@ import {
   TextInput,
   Alert,
   Modal,
+  Keyboard,
+  TouchableWithoutFeedback,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
@@ -239,6 +241,7 @@ export default function ActiveWorkoutScreen() {
         className="flex-1 px-5"
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
       >
         <View className="pt-4 pb-8">
 

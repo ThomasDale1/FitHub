@@ -12,6 +12,10 @@ import {
   Alert,
   ActivityIndicator,
   Modal,
+  KeyboardAvoidingView,
+  Platform,
+  Keyboard,
+  TouchableWithoutFeedback,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -192,118 +196,124 @@ function AddFoodModal({
 
   return (
     <Modal visible={visible} animationType="slide" transparent>
-      <View className="flex-1 bg-black/60 justify-end">
-        <View className="bg-background rounded-t-3xl p-5 pb-10">
-          {/* Header */}
-          <View className="flex-row justify-between items-center mb-5">
-            <Text className="text-white font-bold text-xl">
-              Agregar a {MEAL_CONFIG[mealType].label}
-            </Text>
-            <TouchableOpacity onPress={onClose}>
-              <Ionicons name="close" size={24} color="#A0A0B0" />
-            </TouchableOpacity>
-          </View>
-
-          {/* Nombre */}
-          <Text className="text-text-secondary text-sm mb-1">Alimento</Text>
-          <TextInput
-            className="bg-background-elevated text-white rounded-2xl px-4 py-3 mb-3 text-base"
-            value={name}
-            onChangeText={setName}
-            placeholder="Ej: Pechuga de pollo"
-            placeholderTextColor="#6B6B80"
-            autoFocus
-          />
-
-          {/* Porción */}
-          <View className="flex-row gap-x-3 mb-3">
-            <View className="flex-1">
-              <Text className="text-text-secondary text-sm mb-1">Cantidad</Text>
-              <TextInput
-                className="bg-background-elevated text-white rounded-2xl px-4 py-3 text-base"
-                value={servingSize}
-                onChangeText={setServingSize}
-                keyboardType="decimal-pad"
-                placeholderTextColor="#6B6B80"
-              />
-            </View>
-            <View className="flex-1">
-              <Text className="text-text-secondary text-sm mb-1">Unidad</Text>
-              <TextInput
-                className="bg-background-elevated text-white rounded-2xl px-4 py-3 text-base"
-                value={servingUnit}
-                onChangeText={setServingUnit}
-                placeholder="g, ml, unidad..."
-                placeholderTextColor="#6B6B80"
-              />
-            </View>
-          </View>
-
-          {/* Macros */}
-          <Text className="text-white font-bold text-base mb-2">Macros</Text>
-          <View className="flex-row gap-x-2 mb-4">
-            <View className="flex-1">
-              <Text className="text-text-secondary text-xs mb-1 text-center">Kcal *</Text>
-              <TextInput
-                className="bg-background-elevated text-white rounded-2xl px-3 py-3 text-base text-center"
-                value={calories}
-                onChangeText={setCalories}
-                keyboardType="number-pad"
-                placeholder="0"
-                placeholderTextColor="#6B6B80"
-              />
-            </View>
-            <View className="flex-1">
-              <Text className="text-text-secondary text-xs mb-1 text-center">Prot (g)</Text>
-              <TextInput
-                className="bg-background-elevated text-white rounded-2xl px-3 py-3 text-base text-center"
-                value={protein}
-                onChangeText={setProtein}
-                keyboardType="decimal-pad"
-                placeholder="0"
-                placeholderTextColor="#6B6B80"
-              />
-            </View>
-            <View className="flex-1">
-              <Text className="text-text-secondary text-xs mb-1 text-center">Carbs (g)</Text>
-              <TextInput
-                className="bg-background-elevated text-white rounded-2xl px-3 py-3 text-base text-center"
-                value={carbs}
-                onChangeText={setCarbs}
-                keyboardType="decimal-pad"
-                placeholder="0"
-                placeholderTextColor="#6B6B80"
-              />
-            </View>
-            <View className="flex-1">
-              <Text className="text-text-secondary text-xs mb-1 text-center">Grasa (g)</Text>
-              <TextInput
-                className="bg-background-elevated text-white rounded-2xl px-3 py-3 text-base text-center"
-                value={fat}
-                onChangeText={setFat}
-                keyboardType="decimal-pad"
-                placeholder="0"
-                placeholderTextColor="#6B6B80"
-              />
-            </View>
-          </View>
-
-          {/* Botón */}
-          <TouchableOpacity
-            className="bg-primary rounded-2xl py-4 items-center"
-            onPress={handleSave}
-            disabled={saving}
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <View className="flex-1 bg-black/60 justify-end">
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
           >
-            {saving ? (
-              <ActivityIndicator color="white" />
-            ) : (
-              <Text className="text-white font-bold text-base">
-                Agregar alimento
-              </Text>
-            )}
-          </TouchableOpacity>
+            <View className="bg-background rounded-t-3xl p-5 pb-10">
+              {/* Header */}
+              <View className="flex-row justify-between items-center mb-5">
+                <Text className="text-white font-bold text-xl">
+                  Agregar a {MEAL_CONFIG[mealType].label}
+                </Text>
+                <TouchableOpacity onPress={onClose}>
+                  <Ionicons name="close" size={24} color="#A0A0B0" />
+                </TouchableOpacity>
+              </View>
+
+              {/* Nombre */}
+              <Text className="text-text-secondary text-sm mb-1">Alimento</Text>
+              <TextInput
+                className="bg-background-elevated text-white rounded-2xl px-4 py-3 mb-3 text-base"
+                value={name}
+                onChangeText={setName}
+                placeholder="Ej: Pechuga de pollo"
+                placeholderTextColor="#6B6B80"
+                autoFocus
+              />
+
+              {/* Porción */}
+              <View className="flex-row gap-x-3 mb-3">
+                <View className="flex-1">
+                  <Text className="text-text-secondary text-sm mb-1">Cantidad</Text>
+                  <TextInput
+                    className="bg-background-elevated text-white rounded-2xl px-4 py-3 text-base"
+                    value={servingSize}
+                    onChangeText={setServingSize}
+                    keyboardType="decimal-pad"
+                    placeholderTextColor="#6B6B80"
+                  />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-text-secondary text-sm mb-1">Unidad</Text>
+                  <TextInput
+                    className="bg-background-elevated text-white rounded-2xl px-4 py-3 text-base"
+                    value={servingUnit}
+                    onChangeText={setServingUnit}
+                    placeholder="g, ml, unidad..."
+                    placeholderTextColor="#6B6B80"
+                  />
+                </View>
+              </View>
+
+              {/* Macros */}
+              <Text className="text-white font-bold text-base mb-2">Macros</Text>
+              <View className="flex-row gap-x-2 mb-4">
+                <View className="flex-1">
+                  <Text className="text-text-secondary text-xs mb-1 text-center">Kcal *</Text>
+                  <TextInput
+                    className="bg-background-elevated text-white rounded-2xl px-3 py-3 text-base text-center"
+                    value={calories}
+                    onChangeText={setCalories}
+                    keyboardType="number-pad"
+                    placeholder="0"
+                    placeholderTextColor="#6B6B80"
+                  />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-text-secondary text-xs mb-1 text-center">Prot (g)</Text>
+                  <TextInput
+                    className="bg-background-elevated text-white rounded-2xl px-3 py-3 text-base text-center"
+                    value={protein}
+                    onChangeText={setProtein}
+                    keyboardType="decimal-pad"
+                    placeholder="0"
+                    placeholderTextColor="#6B6B80"
+                  />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-text-secondary text-xs mb-1 text-center">Carbs (g)</Text>
+                  <TextInput
+                    className="bg-background-elevated text-white rounded-2xl px-3 py-3 text-base text-center"
+                    value={carbs}
+                    onChangeText={setCarbs}
+                    keyboardType="decimal-pad"
+                    placeholder="0"
+                    placeholderTextColor="#6B6B80"
+                  />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-text-secondary text-xs mb-1 text-center">Grasa (g)</Text>
+                  <TextInput
+                    className="bg-background-elevated text-white rounded-2xl px-3 py-3 text-base text-center"
+                    value={fat}
+                    onChangeText={setFat}
+                    keyboardType="decimal-pad"
+                    placeholder="0"
+                    placeholderTextColor="#6B6B80"
+                  />
+                </View>
+              </View>
+
+              {/* Botón */}
+              <TouchableOpacity
+                className="bg-primary rounded-2xl py-4 items-center"
+                onPress={handleSave}
+                disabled={saving}
+              >
+                {saving ? (
+                  <ActivityIndicator color="white" />
+                ) : (
+                  <Text className="text-white font-bold text-base">
+                    Agregar alimento
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </KeyboardAvoidingView>
         </View>
-      </View>
+      </TouchableWithoutFeedback>
     </Modal>
   );
 }

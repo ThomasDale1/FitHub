@@ -13,6 +13,10 @@ import {
   ActivityIndicator,
   Modal,
   FlatList,
+  KeyboardAvoidingView,
+  Platform,
+  Keyboard,
+  TouchableWithoutFeedback,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -246,42 +250,48 @@ function CreatePostModal({
 
   return (
     <Modal visible={visible} animationType="slide" transparent>
-      <View className="flex-1 bg-black/60 justify-end">
-        <View className="bg-background rounded-t-3xl p-5 pb-10">
-          <View className="flex-row justify-between items-center mb-4">
-            <Text className="text-white font-bold text-xl">Nuevo post</Text>
-            <TouchableOpacity onPress={onClose}>
-              <Ionicons name="close" size={24} color="#A0A0B0" />
-            </TouchableOpacity>
-          </View>
-
-          <TextInput
-            className="bg-background-elevated text-white rounded-2xl px-4 py-4 text-base mb-4"
-            value={content}
-            onChangeText={setContent}
-            placeholder="¿Qué quieres compartir con la comunidad?"
-            placeholderTextColor="#6B6B80"
-            multiline
-            numberOfLines={4}
-            style={{ textAlignVertical: "top", minHeight: 120 }}
-            autoFocus
-          />
-
-          <TouchableOpacity
-            className={`rounded-2xl py-4 items-center ${content.trim() ? "bg-primary" : "bg-background-elevated"}`}
-            onPress={handlePost}
-            disabled={!content.trim() || posting}
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <View className="flex-1 bg-black/60 justify-end">
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
           >
-            {posting ? (
-              <ActivityIndicator color="white" />
-            ) : (
-              <Text className={`font-bold text-base ${content.trim() ? "text-white" : "text-text-muted"}`}>
-                Publicar
-              </Text>
-            )}
-          </TouchableOpacity>
+            <View className="bg-background rounded-t-3xl p-5 pb-10">
+              <View className="flex-row justify-between items-center mb-4">
+                <Text className="text-white font-bold text-xl">Nuevo post</Text>
+                <TouchableOpacity onPress={onClose}>
+                  <Ionicons name="close" size={24} color="#A0A0B0" />
+                </TouchableOpacity>
+              </View>
+
+              <TextInput
+                className="bg-background-elevated text-white rounded-2xl px-4 py-4 text-base mb-4"
+                value={content}
+                onChangeText={setContent}
+                placeholder="¿Qué quieres compartir con la comunidad?"
+                placeholderTextColor="#6B6B80"
+                multiline
+                numberOfLines={4}
+                style={{ textAlignVertical: "top", minHeight: 120 }}
+                autoFocus
+              />
+
+              <TouchableOpacity
+                className={`rounded-2xl py-4 items-center ${content.trim() ? "bg-primary" : "bg-background-elevated"}`}
+                onPress={handlePost}
+                disabled={!content.trim() || posting}
+              >
+                {posting ? (
+                  <ActivityIndicator color="white" />
+                ) : (
+                  <Text className={`font-bold text-base ${content.trim() ? "text-white" : "text-text-muted"}`}>
+                    Publicar
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </KeyboardAvoidingView>
         </View>
-      </View>
+      </TouchableWithoutFeedback>
     </Modal>
   );
 }
@@ -357,120 +367,132 @@ function CreateChallengeModal({
 
   return (
     <Modal visible={visible} animationType="slide" transparent>
-      <View className="flex-1 bg-black/60 justify-end">
-        <View className="bg-background rounded-t-3xl p-5 pb-10">
-          <View className="flex-row justify-between items-center mb-5">
-            <Text className="text-white font-bold text-xl">Crear Challenge</Text>
-            <TouchableOpacity onPress={onClose}>
-              <Ionicons name="close" size={24} color="#A0A0B0" />
-            </TouchableOpacity>
-          </View>
-
-          {/* Nombre */}
-          <Text className="text-text-secondary text-sm mb-1">Nombre del reto</Text>
-          <TextInput
-            className="bg-background-elevated text-white rounded-2xl px-4 py-3 mb-4"
-            value={title}
-            onChangeText={setTitle}
-            placeholder="Ej: Reto de volumen semanal"
-            placeholderTextColor="#6B6B80"
-          />
-
-          {/* Tipo */}
-          <Text className="text-text-secondary text-sm mb-2">Tipo</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-4">
-            <View className="flex-row gap-x-2">
-              {CHALLENGE_TYPES.map((t, i) => (
-                <TouchableOpacity
-                  key={t.key}
-                  className={`rounded-2xl px-4 py-2.5 flex-row items-center gap-x-1.5 ${
-                    selectedType === i ? "bg-primary" : "bg-background-elevated"
-                  }`}
-                  onPress={() => setSelectedType(i)}
-                >
-                  <Ionicons
-                    name={t.icon as any}
-                    size={16}
-                    color={selectedType === i ? "white" : "#A0A0B0"}
-                  />
-                  <Text className={`text-sm font-bold ${
-                    selectedType === i ? "text-white" : "text-text-secondary"
-                  }`}>{t.label}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </ScrollView>
-
-          {/* Modo */}
-          <Text className="text-text-secondary text-sm mb-2">Modo</Text>
-          <View className="flex-row gap-x-2 mb-4">
-            <TouchableOpacity
-              className={`flex-1 rounded-2xl p-3 ${
-                mode === "MILESTONE" ? "bg-primary/20 border border-primary" : "bg-background-elevated"
-              }`}
-              onPress={() => setMode("MILESTONE")}
-            >
-              <Text className={`font-bold text-sm ${
-                mode === "MILESTONE" ? "text-primary" : "text-text-secondary"
-              }`}>🏁 Carrera</Text>
-              <Text className="text-text-muted text-xs mt-0.5">
-                Primero en llegar gana
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              className={`flex-1 rounded-2xl p-3 ${
-                mode === "TIMED" ? "bg-primary/20 border border-primary" : "bg-background-elevated"
-              }`}
-              onPress={() => setMode("TIMED")}
-            >
-              <Text className={`font-bold text-sm ${
-                mode === "TIMED" ? "text-primary" : "text-text-secondary"
-              }`}>⏱ Competencia</Text>
-              <Text className="text-text-muted text-xs mt-0.5">
-                Mejor puntaje al final gana
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Meta */}
-          <Text className="text-text-secondary text-sm mb-1">
-            Meta ({CHALLENGE_TYPES[selectedType].unit})
-          </Text>
-          <TextInput
-            className="bg-background-elevated text-white rounded-2xl px-4 py-3 mb-4"
-            value={goal}
-            onChangeText={setGoal}
-            keyboardType="numeric"
-            placeholder={`Ej: 100 ${CHALLENGE_TYPES[selectedType].unit}`}
-            placeholderTextColor="#6B6B80"
-          />
-
-          {/* Duración */}
-          <Text className="text-text-secondary text-sm mb-2">Duración</Text>
-          <View className="flex-row gap-x-2 mb-5">
-            {DURATION_PRESETS.map((d, i) => (
-              <TouchableOpacity
-                key={d.days}
-                className={`flex-1 rounded-2xl py-2.5 items-center ${
-                  selectedDuration === i ? "bg-primary" : "bg-background-elevated"
-                }`}
-                onPress={() => setSelectedDuration(i)}
-              >
-                <Text className={`text-xs font-bold ${
-                  selectedDuration === i ? "text-white" : "text-text-secondary"
-                }`}>{d.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          <TouchableOpacity
-            className="bg-primary rounded-2xl py-4 items-center"
-            onPress={handleSubmit}
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <View className="flex-1 bg-black/60 justify-end">
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
           >
-            <Text className="text-white font-bold text-base">Crear Challenge</Text>
-          </TouchableOpacity>
+            <ScrollView
+              bounces={false}
+              keyboardShouldPersistTaps="handled"
+              style={{ maxHeight: "85%" }}
+            >
+              <View className="bg-background rounded-t-3xl p-5 pb-10">
+                <View className="flex-row justify-between items-center mb-5">
+                  <Text className="text-white font-bold text-xl">Crear Challenge</Text>
+                  <TouchableOpacity onPress={onClose}>
+                    <Ionicons name="close" size={24} color="#A0A0B0" />
+                  </TouchableOpacity>
+                </View>
+
+                {/* Nombre */}
+                <Text className="text-text-secondary text-sm mb-1">Nombre del reto</Text>
+                <TextInput
+                  className="bg-background-elevated text-white rounded-2xl px-4 py-3 mb-4"
+                  value={title}
+                  onChangeText={setTitle}
+                  placeholder="Ej: Reto de volumen semanal"
+                  placeholderTextColor="#6B6B80"
+                />
+
+                {/* Tipo */}
+                <Text className="text-text-secondary text-sm mb-2">Tipo</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-4">
+                  <View className="flex-row gap-x-2">
+                    {CHALLENGE_TYPES.map((t, i) => (
+                      <TouchableOpacity
+                        key={t.key}
+                        className={`rounded-2xl px-4 py-2.5 flex-row items-center gap-x-1.5 ${
+                          selectedType === i ? "bg-primary" : "bg-background-elevated"
+                        }`}
+                        onPress={() => setSelectedType(i)}
+                      >
+                        <Ionicons
+                          name={t.icon as any}
+                          size={16}
+                          color={selectedType === i ? "white" : "#A0A0B0"}
+                        />
+                        <Text className={`text-sm font-bold ${
+                          selectedType === i ? "text-white" : "text-text-secondary"
+                        }`}>{t.label}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </ScrollView>
+
+                {/* Modo */}
+                <Text className="text-text-secondary text-sm mb-2">Modo</Text>
+                <View className="flex-row gap-x-2 mb-4">
+                  <TouchableOpacity
+                    className={`flex-1 rounded-2xl p-3 ${
+                      mode === "MILESTONE" ? "bg-primary/20 border border-primary" : "bg-background-elevated"
+                    }`}
+                    onPress={() => setMode("MILESTONE")}
+                  >
+                    <Text className={`font-bold text-sm ${
+                      mode === "MILESTONE" ? "text-primary" : "text-text-secondary"
+                    }`}>🏁 Carrera</Text>
+                    <Text className="text-text-muted text-xs mt-0.5">
+                      Primero en llegar gana
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    className={`flex-1 rounded-2xl p-3 ${
+                      mode === "TIMED" ? "bg-primary/20 border border-primary" : "bg-background-elevated"
+                    }`}
+                    onPress={() => setMode("TIMED")}
+                  >
+                    <Text className={`font-bold text-sm ${
+                      mode === "TIMED" ? "text-primary" : "text-text-secondary"
+                    }`}>⏱ Competencia</Text>
+                    <Text className="text-text-muted text-xs mt-0.5">
+                      Mejor puntaje al final gana
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Meta */}
+                <Text className="text-text-secondary text-sm mb-1">
+                  Meta ({CHALLENGE_TYPES[selectedType].unit})
+                </Text>
+                <TextInput
+                  className="bg-background-elevated text-white rounded-2xl px-4 py-3 mb-4"
+                  value={goal}
+                  onChangeText={setGoal}
+                  keyboardType="numeric"
+                  placeholder={`Ej: 100 ${CHALLENGE_TYPES[selectedType].unit}`}
+                  placeholderTextColor="#6B6B80"
+                />
+
+                {/* Duración */}
+                <Text className="text-text-secondary text-sm mb-2">Duración</Text>
+                <View className="flex-row gap-x-2 mb-5">
+                  {DURATION_PRESETS.map((d, i) => (
+                    <TouchableOpacity
+                      key={d.days}
+                      className={`flex-1 rounded-2xl py-2.5 items-center ${
+                        selectedDuration === i ? "bg-primary" : "bg-background-elevated"
+                      }`}
+                      onPress={() => setSelectedDuration(i)}
+                    >
+                      <Text className={`text-xs font-bold ${
+                        selectedDuration === i ? "text-white" : "text-text-secondary"
+                      }`}>{d.label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <TouchableOpacity
+                  className="bg-primary rounded-2xl py-4 items-center"
+                  onPress={handleSubmit}
+                >
+                  <Text className="text-white font-bold text-base">Crear Challenge</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </KeyboardAvoidingView>
         </View>
-      </View>
+      </TouchableWithoutFeedback>
     </Modal>
   );
 }

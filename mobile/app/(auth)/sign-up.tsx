@@ -86,7 +86,7 @@ export default function SignUpScreen() {
   };
 
   return (
-    <ScrollView className="flex-1 bg-background">
+    <ScrollView className="flex-1 bg-background" keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
       <SafeAreaView className="flex-1 px-6 pt-8">
 
         {/* Header */}
@@ -148,6 +148,7 @@ export default function SignUpScreen() {
       {/* Modal verificación de código */}
       <Modal
         isVisible={verification.state === "pending"}
+        avoidKeyboard
         onModalHide={() => {
           if (verification.state === "success") {
             router.replace("/(tabs)");

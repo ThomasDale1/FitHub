@@ -304,6 +304,26 @@ export default function StepsScreen() {
     };
   }, []);
 
+  // ─── Fetch data (solo lectura, sin sync) ───────────
+  const fetchData = useCallback(async () => {
+    try {
+      const [todayRes, weekRes] = await Promise.all([
+        stepsAPI.getToday(),
+        stepsAPI.getWeek(),
+      ]);
+      setTodayData(todayRes.data);
+      setWeekData(weekRes.data);
+    } catch (err) {
+      console.error("Steps fetch error:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
   // ─── Refresh steps cuando la app vuelve al foreground ─
   useEffect(() => {
     const subscription = AppState.addEventListener(
@@ -340,26 +360,6 @@ export default function StepsScreen() {
     }, 60000);
     return () => clearInterval(syncInterval);
   }, [liveSteps]);
-
-  // ─── Fetch data (solo lectura, sin sync) ───────────
-  const fetchData = useCallback(async () => {
-    try {
-      const [todayRes, weekRes] = await Promise.all([
-        stepsAPI.getToday(),
-        stepsAPI.getWeek(),
-      ]);
-      setTodayData(todayRes.data);
-      setWeekData(weekRes.data);
-    } catch (err) {
-      console.error("Steps fetch error:", err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
 
 
   const onRefresh = useCallback(async () => {

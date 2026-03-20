@@ -49,7 +49,7 @@ export default function SignInScreen() {
   }, [isLoaded, signIn, setActive, form.email, form.password]);
 
   return (
-    <ScrollView className="flex-1 bg-background">
+    <ScrollView className="flex-1 bg-background" keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
       <SafeAreaView className="flex-1 px-6 pt-8">
 
         {/* Header */}

@@ -260,6 +260,8 @@ export default function AiCoachScreen() {
           ref={scrollRef}
           className="flex-1 px-5 pt-4"
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
         >
           {loading ? (
             <ActivityIndicator color="#6C63FF" size="large" className="mt-20" />
