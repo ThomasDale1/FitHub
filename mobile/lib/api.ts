@@ -590,10 +590,15 @@ export const stepsAPI = {
     return api.post("/api/steps/sync", { steps, hourlySteps, date: localDate });
   },
 
-  getToday: () => api.get<DailyStepsData>("/api/steps/today"),
+  getToday: () => {
+    const today = new Date().toLocaleDateString("en-CA");
+    return api.get<DailyStepsData>(`/api/steps/today?today=${today}`);
+  },
 
-  getWeek: () =>
-    api.get<{ days: WeekDayData[]; weekTotal: any; avgSteps: number }>("/api/steps/week"),
+  getWeek: () => {
+    const today = new Date().toLocaleDateString("en-CA");
+    return api.get<{ days: WeekDayData[]; weekTotal: any; avgSteps: number }>(`/api/steps/week?today=${today}`);
+  },
 
   getMonth: (year?: number, month?: number) =>
     api.get(`/api/steps/month${year ? `?year=${year}&month=${month}` : ""}`),

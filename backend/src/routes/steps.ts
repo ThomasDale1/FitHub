@@ -152,7 +152,9 @@ router.get("/today", async (req: Request, res: Response) => {
     const user = await getUserByClerkId(clerkId!)
     if (!user) { res.status(404).json({ error: "Usuario no encontrado" }); return }
 
-    const today = new Date(new Date().toISOString().split("T")[0] + "T00:00:00.000Z")
+    const clientDate = req.query.today as string | undefined
+    const todayStr = clientDate || new Date().toISOString().split("T")[0]
+    const today = new Date(todayStr + "T00:00:00.000Z")
 
     let dailySteps = await prisma.dailySteps.findUnique({
       where: { userId_date: { userId: user.id, date: today } },
@@ -183,14 +185,20 @@ router.get("/week", async (req: Request, res: Response) => {
     const user = await getUserByClerkId(clerkId!)
     if (!user) { res.status(404).json({ error: "Usuario no encontrado" }); return }
 
-    const days: any[] = []
+    // Usar la fecha local del cliente (o fallback a UTC)
+    const clientDate = req.query.today as string | undefined
     const dayLabels = ["DOM", "LUN", "MAR", "MIÉ", "JUE", "VIE", "SÁB"]
 
+    // Determinar "hoy" desde la perspectiva del cliente
+    const todayStr = clientDate || new Date().toISOString().split("T")[0]
+    const todayParts = todayStr.split("-").map(Number) // [YYYY, MM, DD]
+
+    const days: any[] = []
+
     for (let i = 6; i >= 0; i--) {
-      const d = new Date()
-      d.setDate(d.getDate() - i)
-      d.setHours(0, 0, 0, 0)
-      const dateStr = d.toISOString().split("T")[0]
+      // Crear fecha usando componentes para evitar problemas de timezone
+      const d = new Date(todayParts[0], todayParts[1] - 1, todayParts[2] - i)
+      const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
       const targetDate = new Date(dateStr + "T00:00:00.000Z")
 
       const record = await prisma.dailySteps.findUnique({
