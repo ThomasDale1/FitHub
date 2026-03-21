@@ -8,20 +8,26 @@
       "developmentClient": true,
       "distribution": "internal",
       "node": "22.16.0",
-      "installDependencies": "npm install",
       "ios": {
         "simulator": true
+      },
+      "env": {
+        "NPM_CONFIG_LEGACY_PEER_DEPS": "true"
       }
     },
     "preview": {
       "distribution": "internal",
       "node": "22.16.0",
-      "installDependencies": "npm install"
+      "env": {
+        "NPM_CONFIG_LEGACY_PEER_DEPS": "true"
+      }
     },
     "production": {
       "autoIncrement": true,
       "node": "22.16.0",
-      "installDependencies": "npm install"
+      "env": {
+        "NPM_CONFIG_LEGACY_PEER_DEPS": "true"
+      }
     }
   },
   "submit": {
