@@ -7,6 +7,7 @@ import { prisma } from "../lib/prisma.js"
 import { requireAuth } from "../middleware/auth.js"
 import { getAuth } from "@clerk/express"
 import { sendPushToUser } from "../lib/pushNotifications.js"
+import { isValidCloudinaryUrl, deleteCloudinaryResource } from "../lib/cloudinary.js"
 
 const router = Router()
 router.use(requireAuth)
@@ -210,6 +211,9 @@ router.get("/profile/:userId", async (req: Request, res: Response) => {
     const posts = await prisma.post.findMany({
       where: { userId: targetId, isPublic: true },
       include: {
+        media: {
+          select: { id: true, url: true, type: true, width: true, height: true, duration: true, thumbnailUrl: true },
+        },
         _count: { select: { reactions: true, comments: true } },
       },
       orderBy: { createdAt: "desc" },
@@ -236,27 +240,76 @@ router.get("/profile/:userId", async (req: Request, res: Response) => {
 //  POSTS
 // ═══════════════════════════════════════════════════════
 
-// POST /api/social/posts — Crear post
+// POST /api/social/posts — Crear post (con soporte de media)
 router.post("/posts", async (req: Request, res: Response) => {
   try {
     const { userId: clerkId } = getAuth(req)
     const user = await getUserByClerkId(clerkId!)
     if (!user) { res.status(404).json({ error: "Usuario no encontrado" }); return }
 
-    const { content, imageUrls, postType, workoutId, workoutData } = req.body
+    const { content, imageUrls, postType, workoutId, workoutData, media } = req.body
+
+    // Validate media if provided
+    if (media && Array.isArray(media)) {
+      if (media.length > 4) {
+        res.status(400).json({ error: "Máximo 4 archivos por post" }); return
+      }
+      const videoCount = media.filter((m: any) => m.type === "VIDEO").length
+      if (videoCount > 1) {
+        res.status(400).json({ error: "Máximo 1 video por post" }); return
+      }
+      for (const m of media) {
+        if (!isValidCloudinaryUrl(m.url)) {
+          res.status(400).json({ error: "URL de media inválida" }); return
+        }
+      }
+    }
+
+    // Determine postType automatically from media
+    let resolvedPostType = postType || "TEXT"
+    if (media?.length && resolvedPostType === "TEXT") {
+      const hasVideo = media.some((m: any) => m.type === "VIDEO")
+      resolvedPostType = hasVideo ? "VIDEO" : "IMAGE"
+    }
+
+    // Build imageUrls from media for backwards compatibility
+    const resolvedImageUrls = media?.length
+      ? media.filter((m: any) => m.type === "IMAGE").map((m: any) => m.url)
+      : (imageUrls || [])
 
     const post = await prisma.post.create({
       data: {
         userId: user.id,
         content: content || null,
-        imageUrls: imageUrls || [],
-        postType: postType || "TEXT",
+        imageUrls: resolvedImageUrls,
+        postType: resolvedPostType,
         workoutId: workoutId || null,
         workoutData: workoutData || null,
+        // Create Media records
+        ...(media?.length ? {
+          media: {
+            createMany: {
+              data: media.map((m: any) => ({
+                userId: user.id,
+                publicId: m.publicId,
+                url: m.url,
+                type: m.type,
+                width: m.width || null,
+                height: m.height || null,
+                bytes: m.bytes || null,
+                duration: m.duration || null,
+                thumbnailUrl: m.thumbnailUrl || null,
+              })),
+            },
+          },
+        } : {}),
       },
       include: {
         user: {
           select: { id: true, name: true, username: true, avatarUrl: true, level: true },
+        },
+        media: {
+          select: { id: true, url: true, type: true, width: true, height: true, duration: true, thumbnailUrl: true },
         },
         _count: { select: { reactions: true, comments: true } },
       },
@@ -304,6 +357,9 @@ router.get("/feed", async (req: Request, res: Response) => {
         reactions: {
           select: { id: true, userId: true, type: true },
         },
+        media: {
+          select: { id: true, url: true, type: true, width: true, height: true, duration: true, thumbnailUrl: true },
+        },
         _count: { select: { comments: true } },
       },
       orderBy: { createdAt: "desc" },
@@ -332,6 +388,43 @@ router.get("/feed", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Feed error:", error)
     res.status(500).json({ error: "Error al obtener feed" })
+  }
+})
+
+// DELETE /api/social/posts/:id — Borrar post + cleanup media
+router.delete("/posts/:id", async (req: Request, res: Response) => {
+  try {
+    const { userId: clerkId } = getAuth(req)
+    const user = await getUserByClerkId(clerkId!)
+    if (!user) { res.status(404).json({ error: "Usuario no encontrado" }); return }
+
+    const postId = req.params.id as string
+
+    // Fetch post with its media for Cloudinary cleanup
+    const post = await prisma.post.findUnique({
+      where: { id: postId },
+      select: {
+        userId: true,
+        media: { select: { publicId: true, type: true } },
+      },
+    })
+
+    if (!post) { res.status(404).json({ error: "Post no encontrado" }); return }
+    if (post.userId !== user.id) { res.status(403).json({ error: "No autorizado" }); return }
+
+    const mediaToDelete = post.media
+
+    // Delete post (cascades to media records in DB)
+    await prisma.post.delete({ where: { id: postId } })
+
+    // Cleanup media from Cloudinary (fire and forget)
+    for (const m of mediaToDelete) {
+      deleteCloudinaryResource(m.publicId, m.type === "VIDEO" ? "video" : "image").catch(() => {})
+    }
+
+    res.json({ success: true })
+  } catch (error) {
+    res.status(500).json({ error: "Error al borrar post" })
   }
 })
 

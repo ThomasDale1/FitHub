@@ -12,7 +12,6 @@ import {
   Alert,
   ActivityIndicator,
   Modal,
-  FlatList,
   KeyboardAvoidingView,
   Platform,
   Keyboard,
@@ -23,7 +22,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { useState, useCallback, useEffect } from "react";
 import { useUser } from "@clerk/clerk-expo";
-import { router } from "expo-router";
 import {
   socialAPI,
   badgesAPI,
@@ -31,6 +29,12 @@ import {
   type SocialPost,
   type ChallengeData,
 } from "@/lib/api";
+import { pickImages, pickVideo, takePhoto } from "@/lib/mediaPicker";
+import {
+  uploadToCloudinary,
+  transforms,
+  type MediaAttachment,
+} from "@/lib/cloudinary";
 
 // ─── Reaction Emojis ─────────────────────────────────
 const REACTIONS: Record<string, { emoji: string; label: string }> = {
@@ -82,8 +86,13 @@ function PostCard({
       <View className="flex-row items-center gap-x-3 mb-3">
         {post.user.avatarUrl ? (
           <Image
-            source={{ uri: post.user.avatarUrl }}
+            source={{
+              uri: post.user.avatarUrl.startsWith("https://res.cloudinary.com/")
+                ? transforms.avatarSmall(post.user.avatarUrl)
+                : post.user.avatarUrl,
+            }}
             style={{ width: 40, height: 40, borderRadius: 20 }}
+            recyclingKey={post.user.avatarUrl}
           />
         ) : (
           <View className="bg-primary/20 rounded-full w-10 h-10 items-center justify-center">
@@ -155,8 +164,72 @@ function PostCard({
         </View>
       )}
 
-      {/* Images */}
-      {post.imageUrls && post.imageUrls.length > 0 && (
+      {/* Media (images/video) */}
+      {post.media && post.media.length > 0 ? (
+        post.media.length === 1 ? (
+          <View className="rounded-2xl overflow-hidden mb-3">
+            <Image
+              source={{
+                uri:
+                  post.media[0].type === "VIDEO"
+                    ? post.media[0].thumbnailUrl || post.media[0].url
+                    : transforms.feedImage(post.media[0].url),
+              }}
+              style={{
+                width: "100%",
+                height: post.media[0].width && post.media[0].height
+                  ? Math.min(
+                      350,
+                      Math.round(
+                        (post.media[0].height / post.media[0].width) *
+                          (post.media[0].width > 350 ? 350 : post.media[0].width)
+                      )
+                    )
+                  : 250,
+              }}
+              contentFit="cover"
+              recyclingKey={post.media[0].url}
+              transition={200}
+            />
+            {post.media[0].type === "VIDEO" && (
+              <View className="absolute inset-0 items-center justify-center">
+                <View className="bg-black/50 rounded-full p-3">
+                  <Ionicons name="play" size={28} color="white" />
+                </View>
+                {post.media[0].duration && (
+                  <View className="absolute bottom-2 right-2 bg-black/60 rounded-lg px-2 py-0.5">
+                    <Text className="text-white text-xs font-bold">
+                      {Math.round(post.media[0].duration)}s
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
+          </View>
+        ) : (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            className="mb-3"
+            pagingEnabled={false}
+          >
+            <View className="flex-row gap-x-2">
+              {post.media.map((m) => (
+                <View key={m.id} className="rounded-2xl overflow-hidden">
+                  <Image
+                    source={{ uri: transforms.thumbnail(m.url) }}
+                    style={{ width: 180, height: 180 }}
+                    contentFit="cover"
+                    recyclingKey={m.url}
+                    transition={200}
+                  />
+                </View>
+              ))}
+            </View>
+          </ScrollView>
+        )
+      ) : post.imageUrls && post.imageUrls.length > 0 ? (
+        /* Backwards compat: old posts with imageUrls only */
         <View className="rounded-2xl overflow-hidden mb-3">
           <Image
             source={{ uri: post.imageUrls[0] }}
@@ -164,7 +237,7 @@ function PostCard({
             contentFit="cover"
           />
         </View>
-      )}
+      ) : null}
 
       {/* Action bar */}
       <View className="flex-row items-center justify-between pt-2 border-t border-background-elevated">
@@ -234,17 +307,152 @@ function CreatePostModal({
 }: {
   visible: boolean;
   onClose: () => void;
-  onSubmit: (content: string) => Promise<void>;
+  onSubmit: (data: {
+    content: string;
+    media?: Array<{
+      publicId: string;
+      url: string;
+      type: "IMAGE" | "VIDEO";
+      width?: number;
+      height?: number;
+      bytes?: number;
+      duration?: number;
+      thumbnailUrl?: string;
+    }>;
+  }) => Promise<void>;
 }) {
   const [content, setContent] = useState("");
+  const [attachments, setAttachments] = useState<MediaAttachment[]>([]);
   const [posting, setPosting] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadStatus, setUploadStatus] = useState("");
+
+  const canPost = content.trim() || attachments.length > 0;
+
+  const handlePickImages = async () => {
+    const maxRemaining = 4 - attachments.filter((a) => a.type === "image").length;
+    if (maxRemaining <= 0) {
+      Alert.alert("Límite", "Máximo 4 imágenes por post");
+      return;
+    }
+    // Can't mix video and images
+    if (attachments.some((a) => a.type === "video")) {
+      Alert.alert("Límite", "No puedes mezclar video e imágenes");
+      return;
+    }
+    const images = await pickImages(maxRemaining);
+    if (images.length > 0) {
+      setAttachments((prev) => [...prev, ...images]);
+    }
+  };
+
+  const handlePickVideo = async () => {
+    if (attachments.length > 0) {
+      Alert.alert("Límite", "El video debe ser el único archivo del post");
+      return;
+    }
+    const video = await pickVideo();
+    if (video) {
+      setAttachments([video]);
+    }
+  };
+
+  const handleTakePhoto = async () => {
+    if (attachments.some((a) => a.type === "video")) {
+      Alert.alert("Límite", "No puedes mezclar video e imágenes");
+      return;
+    }
+    if (attachments.length >= 4) {
+      Alert.alert("Límite", "Máximo 4 imágenes por post");
+      return;
+    }
+    const photo = await takePhoto();
+    if (photo) {
+      setAttachments((prev) => [...prev, photo]);
+    }
+  };
+
+  const removeAttachment = (index: number) => {
+    setAttachments((prev) => prev.filter((_, i) => i !== index));
+  };
 
   const handlePost = async () => {
-    if (!content.trim()) return;
+    if (!canPost) return;
     setPosting(true);
-    await onSubmit(content.trim());
+
+    try {
+      let mediaData: Array<{
+        publicId: string;
+        url: string;
+        type: "IMAGE" | "VIDEO";
+        width?: number;
+        height?: number;
+        bytes?: number;
+        duration?: number;
+        thumbnailUrl?: string;
+      }> | undefined;
+
+      // Upload media to Cloudinary if any
+      if (attachments.length > 0) {
+        setUploadStatus("Subiendo...");
+        mediaData = [];
+
+        for (let i = 0; i < attachments.length; i++) {
+          const att = attachments[i];
+          setUploadStatus(
+            attachments.length > 1
+              ? `Subiendo ${i + 1}/${attachments.length}...`
+              : "Subiendo..."
+          );
+
+          const result = await uploadToCloudinary(att, {
+            folder: att.type === "video" ? "fithub/videos" : "fithub/posts",
+            onProgress: (p) => {
+              const base = (i / attachments.length) * 100;
+              const slice = (1 / attachments.length) * 100;
+              setUploadProgress(Math.round(base + (p.percent / 100) * slice));
+            },
+          });
+
+          mediaData.push({
+            publicId: result.public_id,
+            url: result.secure_url,
+            type: att.type === "video" ? "VIDEO" : "IMAGE",
+            width: result.width,
+            height: result.height,
+            bytes: result.bytes,
+            duration: result.duration,
+            thumbnailUrl:
+              att.type === "video"
+                ? transforms.videoThumbnail(result.secure_url)
+                : undefined,
+          });
+        }
+        setUploadStatus("Publicando...");
+      }
+
+      await onSubmit({ content: content.trim(), media: mediaData });
+      setContent("");
+      setAttachments([]);
+      setUploadProgress(0);
+      setUploadStatus("");
+      onClose();
+    } catch (err) {
+      console.error("Post error:", err);
+      Alert.alert("Error", "No se pudo publicar. Intenta de nuevo.");
+    } finally {
+      setPosting(false);
+      setUploadProgress(0);
+      setUploadStatus("");
+    }
+  };
+
+  const handleClose = () => {
+    if (posting) return;
     setContent("");
-    setPosting(false);
+    setAttachments([]);
+    setUploadProgress(0);
+    setUploadStatus("");
     onClose();
   };
 
@@ -256,34 +464,131 @@ function CreatePostModal({
             behavior={Platform.OS === "ios" ? "padding" : "height"}
           >
             <View className="bg-background rounded-t-3xl p-5 pb-10">
+              {/* Header */}
               <View className="flex-row justify-between items-center mb-4">
                 <Text className="text-white font-bold text-xl">Nuevo post</Text>
-                <TouchableOpacity onPress={onClose}>
+                <TouchableOpacity onPress={handleClose} disabled={posting}>
                   <Ionicons name="close" size={24} color="#A0A0B0" />
                 </TouchableOpacity>
               </View>
 
+              {/* Text input */}
               <TextInput
-                className="bg-background-elevated text-white rounded-2xl px-4 py-4 text-base mb-4"
+                className="bg-background-elevated text-white rounded-2xl px-4 py-4 text-base mb-3"
                 value={content}
                 onChangeText={setContent}
                 placeholder="¿Qué quieres compartir con la comunidad?"
                 placeholderTextColor="#6B6B80"
                 multiline
-                numberOfLines={4}
-                style={{ textAlignVertical: "top", minHeight: 120 }}
-                autoFocus
+                numberOfLines={3}
+                style={{ textAlignVertical: "top", minHeight: 80 }}
+                editable={!posting}
               />
 
+              {/* Media preview */}
+              {attachments.length > 0 && (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  className="mb-3"
+                >
+                  <View className="flex-row gap-x-2">
+                    {attachments.map((att, i) => (
+                      <View key={i} className="relative">
+                        <Image
+                          source={{ uri: att.uri }}
+                          style={{
+                            width: attachments.length === 1 ? 280 : 140,
+                            height: attachments.length === 1 ? 200 : 140,
+                            borderRadius: 16,
+                          }}
+                          contentFit="cover"
+                        />
+                        {att.type === "video" && (
+                          <View className="absolute inset-0 items-center justify-center">
+                            <View className="bg-black/50 rounded-full p-2">
+                              <Ionicons name="play" size={24} color="white" />
+                            </View>
+                            {att.duration && (
+                              <View className="absolute bottom-2 right-2 bg-black/60 rounded-lg px-2 py-0.5">
+                                <Text className="text-white text-xs font-bold">
+                                  {Math.round(att.duration)}s
+                                </Text>
+                              </View>
+                            )}
+                          </View>
+                        )}
+                        {!posting && (
+                          <TouchableOpacity
+                            className="absolute -top-1 -right-1 bg-red-500 rounded-full w-6 h-6 items-center justify-center"
+                            onPress={() => removeAttachment(i)}
+                          >
+                            <Ionicons name="close" size={14} color="white" />
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    ))}
+                  </View>
+                </ScrollView>
+              )}
+
+              {/* Upload progress */}
+              {posting && uploadStatus ? (
+                <View className="mb-3">
+                  <View className="flex-row justify-between mb-1">
+                    <Text className="text-text-secondary text-xs">{uploadStatus}</Text>
+                    {uploadProgress > 0 && (
+                      <Text className="text-primary text-xs font-bold">{uploadProgress}%</Text>
+                    )}
+                  </View>
+                  {uploadProgress > 0 && (
+                    <View className="bg-background-elevated rounded-full h-2">
+                      <View
+                        className="bg-primary rounded-full h-2"
+                        style={{ width: `${uploadProgress}%` }}
+                      />
+                    </View>
+                  )}
+                </View>
+              ) : null}
+
+              {/* Media action bar */}
+              {!posting && (
+                <View className="flex-row gap-x-3 mb-4 border-t border-background-elevated pt-3">
+                  <TouchableOpacity
+                    className="flex-row items-center gap-x-1.5 bg-background-elevated rounded-2xl px-4 py-2.5"
+                    onPress={handlePickImages}
+                  >
+                    <Ionicons name="image-outline" size={18} color="#6C63FF" />
+                    <Text className="text-text-secondary text-sm">Foto</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    className="flex-row items-center gap-x-1.5 bg-background-elevated rounded-2xl px-4 py-2.5"
+                    onPress={handlePickVideo}
+                  >
+                    <Ionicons name="videocam-outline" size={18} color="#FF6B35" />
+                    <Text className="text-text-secondary text-sm">Video</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    className="flex-row items-center gap-x-1.5 bg-background-elevated rounded-2xl px-4 py-2.5"
+                    onPress={handleTakePhoto}
+                  >
+                    <Ionicons name="camera-outline" size={18} color="#00D48A" />
+                    <Text className="text-text-secondary text-sm">Cámara</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {/* Post button */}
               <TouchableOpacity
-                className={`rounded-2xl py-4 items-center ${content.trim() ? "bg-primary" : "bg-background-elevated"}`}
+                className={`rounded-2xl py-4 items-center ${canPost ? "bg-primary" : "bg-background-elevated"}`}
                 onPress={handlePost}
-                disabled={!content.trim() || posting}
+                disabled={!canPost || posting}
               >
                 {posting ? (
                   <ActivityIndicator color="white" />
                 ) : (
-                  <Text className={`font-bold text-base ${content.trim() ? "text-white" : "text-text-muted"}`}>
+                  <Text className={`font-bold text-base ${canPost ? "text-white" : "text-text-muted"}`}>
                     Publicar
                   </Text>
                 )}
@@ -595,11 +900,31 @@ export default function SocialScreen() {
     }
   };
 
-  const handleCreatePost = async (content: string) => {
+  const handleCreatePost = async (data: {
+    content: string;
+    media?: {
+      publicId: string;
+      url: string;
+      type: "IMAGE" | "VIDEO";
+      width?: number;
+      height?: number;
+      bytes?: number;
+      duration?: number;
+      thumbnailUrl?: string;
+    }[];
+  }) => {
     try {
-      await socialAPI.createPost({ content, postType: "TEXT" });
+      await socialAPI.createPost({
+        content: data.content || undefined,
+        media: data.media,
+        postType: data.media?.length
+          ? data.media.some((m) => m.type === "VIDEO")
+            ? "VIDEO"
+            : "IMAGE"
+          : "TEXT",
+      });
       await fetchFeed();
-    } catch (err) {
+    } catch {
       Alert.alert("Error", "No se pudo publicar");
     }
   };

@@ -27,6 +27,8 @@ import { router } from "expo-router";
 import { useProfile, useUserStats } from "@/hooks/useUserData";
 import XPBar from "@/components/XPBar";
 import { api } from "@/lib/api";
+import { pickAvatar } from "@/lib/mediaPicker";
+import { uploadToCloudinary, transforms } from "@/lib/cloudinary";
 
 // ─── Stat Item Component ─────────────────────────────
 function ProfileStat({
@@ -238,6 +240,7 @@ export default function ProfileScreen() {
   const { stats, loading: statsLoading, refetch: refetchStats } = useUserStats();
   const [refreshing, setRefreshing] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -248,6 +251,26 @@ export default function ProfileScreen() {
   const handleSaveProfile = async (data: any) => {
     await updateProfile(data);
     setEditing(false);
+  };
+
+  const handleChangeAvatar = async () => {
+    const image = await pickAvatar();
+    if (!image) return;
+
+    setUploadingAvatar(true);
+    try {
+      const result = await uploadToCloudinary(image, {
+        folder: "fithub/avatars",
+      });
+      await updateProfile({
+        avatarUrl: result.secure_url,
+        avatarPublicId: result.public_id,
+      });
+    } catch {
+      Alert.alert("Error", "No se pudo subir la foto de perfil");
+    } finally {
+      setUploadingAvatar(false);
+    }
   };
 
   const handleSignOut = () => {
@@ -381,35 +404,50 @@ export default function ProfileScreen() {
 
           {/* ─── AVATAR + INFO ──────────────────────── */}
           <View className="items-center mb-6">
-            {avatarUrl ? (
-              <Image
-                source={{ uri: avatarUrl }}
-                style={{
-                  width: 100,
-                  height: 100,
-                  borderRadius: 50,
-                  borderWidth: 3,
-                  borderColor: "#6C63FF",
-                }}
-              />
-            ) : (
-              <View
-                className="bg-primary/20 items-center justify-center"
-                style={{
-                  width: 100,
-                  height: 100,
-                  borderRadius: 50,
-                  borderWidth: 3,
-                  borderColor: "#6C63FF",
-                }}
-              >
-                <Text className="text-primary text-3xl font-bold">
-                  {(profile?.name || clerkUser?.firstName || "A")
-                    .charAt(0)
-                    .toUpperCase()}
-                </Text>
+            <TouchableOpacity onPress={handleChangeAvatar} disabled={uploadingAvatar} activeOpacity={0.7}>
+              <View>
+                {avatarUrl ? (
+                  <Image
+                    source={{ uri: avatarUrl.startsWith("https://res.cloudinary.com/") ? transforms.avatarLarge(avatarUrl) : avatarUrl }}
+                    style={{
+                      width: 100,
+                      height: 100,
+                      borderRadius: 50,
+                      borderWidth: 3,
+                      borderColor: "#6C63FF",
+                    }}
+                  />
+                ) : (
+                  <View
+                    className="bg-primary/20 items-center justify-center"
+                    style={{
+                      width: 100,
+                      height: 100,
+                      borderRadius: 50,
+                      borderWidth: 3,
+                      borderColor: "#6C63FF",
+                    }}
+                  >
+                    <Text className="text-primary text-3xl font-bold">
+                      {(profile?.name || clerkUser?.firstName || "A")
+                        .charAt(0)
+                        .toUpperCase()}
+                    </Text>
+                  </View>
+                )}
+                {/* Camera overlay */}
+                <View
+                  className="absolute bottom-0 right-0 bg-primary rounded-full items-center justify-center"
+                  style={{ width: 30, height: 30, borderWidth: 2, borderColor: "#0D0D1B" }}
+                >
+                  {uploadingAvatar ? (
+                    <ActivityIndicator color="white" size="small" />
+                  ) : (
+                    <Ionicons name="camera" size={14} color="white" />
+                  )}
+                </View>
               </View>
-            )}
+            </TouchableOpacity>
 
             <Text className="text-white text-xl font-bold mt-3">
               {profile?.name || clerkUser?.fullName || "Atleta"}
@@ -653,7 +691,7 @@ export default function ProfileScreen() {
 
           {/* ─── VERSION INFO ──────────────────────── */}
           <Text className="text-text-muted text-xs text-center mt-6">
-            Fit Hub v1.1.0 — Sprint 2
+            Fit Hub v1.2.0 — Sprint 1
           </Text>
         </View>
       </ScrollView>

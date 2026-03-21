@@ -6,6 +6,7 @@ import { Router, Request, Response } from "express"
 import { prisma } from "../lib/prisma.js"
 import { requireAuth } from "../middleware/auth.js"
 import { getAuth } from "@clerk/express"
+import { isValidCloudinaryUrl, deleteCloudinaryResource } from "../lib/cloudinary.js"
 
 const router = Router()
 router.use(requireAuth)
@@ -133,6 +134,7 @@ router.put("/me", async (req: Request, res: Response) => {
       "username",
       "bio",
       "avatarUrl",
+      "avatarPublicId",
       "weight",
       "height",
       "bodyFat",
@@ -143,6 +145,16 @@ router.put("/me", async (req: Request, res: Response) => {
       if (req.body[field] !== undefined) {
         updateData[field] = req.body[field]
       }
+    }
+
+    // Validate avatar URL if provided
+    if (updateData.avatarUrl && !isValidCloudinaryUrl(updateData.avatarUrl)) {
+      res.status(400).json({ error: "URL de avatar inválida" }); return
+    }
+
+    // Delete old avatar from Cloudinary if replacing
+    if (updateData.avatarPublicId && user.avatarPublicId && user.avatarPublicId !== updateData.avatarPublicId) {
+      deleteCloudinaryResource(user.avatarPublicId).catch(() => {})
     }
 
     const updatedUser = await prisma.user.update({

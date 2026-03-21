@@ -80,6 +80,7 @@ export interface UserProfile {
   username: string;
   name: string;
   avatarUrl: string | null;
+  avatarPublicId: string | null;
   bio: string | null;
   weight: number | null;
   height: number | null;
@@ -214,6 +215,16 @@ export interface AiMessage {
   createdAt: string;
 }
 
+export interface PostMedia {
+  id: string;
+  url: string;
+  type: "IMAGE" | "VIDEO";
+  width: number | null;
+  height: number | null;
+  duration: number | null;
+  thumbnailUrl: string | null;
+}
+
 export interface SocialPost {
   id: string;
   userId: string;
@@ -230,6 +241,7 @@ export interface SocialPost {
     avatarUrl: string | null;
     level: number;
   };
+  media: PostMedia[];
   reactionsCount: number;
   myReaction: string | null;
   _count: { comments: number };
@@ -497,8 +509,24 @@ export const socialAPI = {
     api.get(`/api/social/feed${cursor ? `?cursor=${cursor}` : ""}`),
  
   // Posts
-  createPost: (data: { content?: string; imageUrls?: string[]; postType?: string; workoutData?: any }) =>
-    api.post("/api/social/posts", data),
+  createPost: (data: {
+    content?: string;
+    imageUrls?: string[];
+    postType?: string;
+    workoutData?: any;
+    media?: Array<{
+      publicId: string;
+      url: string;
+      type: "IMAGE" | "VIDEO";
+      width?: number;
+      height?: number;
+      bytes?: number;
+      duration?: number;
+      thumbnailUrl?: string;
+    }>;
+  }) => api.post("/api/social/posts", data),
+
+  deletePost: (postId: string) => api.delete(`/api/social/posts/${postId}`),
  
   // Reactions
   react: (postId: string, type: string) =>

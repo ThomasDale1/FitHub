@@ -14,7 +14,8 @@ model User {
   email       String    @unique
   username    String    @unique
   name        String
-  avatarUrl   String?
+  avatarUrl       String?
+  avatarPublicId  String?
   bio         String?
   weight      Float?
   height      Float?
@@ -55,6 +56,7 @@ model User {
 
   dailySteps               DailySteps[]
   pushTokens               PushToken[]
+  media                    Media[]
 
   @@map("users")
 }
@@ -222,10 +224,16 @@ enum FoodSource {
 enum PostType {
   TEXT
   IMAGE
+  VIDEO
   WORKOUT_SHARE
   PR_SHARE
   CHALLENGE_SHARE
   MILESTONE
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
 }
 
 enum ReactionType {
@@ -449,6 +457,7 @@ model Post {
   user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   reactions Reaction[]
   comments  Comment[]
+  media     Media[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -597,6 +606,31 @@ model PushToken {
   updatedAt DateTime @updatedAt
 
   @@map("push_tokens")
+}
+
+// ─── MEDIA ───────────────────────────────────────────
+model Media {
+  id          String    @id @default(cuid())
+  userId      String
+  publicId    String    @unique
+  url         String
+  type        MediaType
+  width       Int?
+  height      Int?
+  bytes       Int?
+  duration    Float?
+  thumbnailUrl String?
+
+  postId      String?
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post        Post?     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  createdAt   DateTime  @default(now())
+
+  @@index([userId])
+  @@index([postId])
+  @@map("media")
 }
 
 // ─── DAILY STEPS ──────────────────────────────────────
