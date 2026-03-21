@@ -26,6 +26,7 @@ import {
   getStepsSinceMidnight as healthGetSteps,
   isUsingHealthService,
 } from "@/lib/healthSteps";
+import Constants from "expo-constants";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const RING_SIZE = SCREEN_WIDTH * 0.6;
@@ -490,6 +491,13 @@ export default function StepsScreen() {
               <Ionicons name="heart-circle-outline" size={16} color="#00D48A" />
               <Text className="text-text-secondary text-xs flex-1">
                 {stepSource === "healthkit" ? "Apple Health" : "Health Connect"} — mayor precisión
+              </Text>
+            </View>
+          ) : Constants.appOwnership === "expo" ? (
+            <View className="bg-background-card border border-blue-500/20 rounded-2xl p-3 mb-4 flex-row items-center gap-x-2">
+              <Ionicons name="code-slash-outline" size={16} color="#00BFFF" />
+              <Text className="text-text-secondary text-xs flex-1">
+                Expo Development — en producción se usará Apple Health / Health Connect
               </Text>
             </View>
           ) : null}

@@ -6,6 +6,10 @@
 // ─────────────────────────────────────────────────────
 import { Platform } from "react-native"
 import { Pedometer } from "expo-sensors"
+import Constants from "expo-constants"
+
+// Expo Go cannot load native modules (NitroModules, Health Connect)
+const isExpoGo = Constants.appOwnership === "expo"
 
 // ─── Types ──────────────────────────────────────────
 export interface StepResult {
@@ -20,7 +24,7 @@ let _source: StepResult["source"] = "pedometer"
 
 // ─── iOS: HealthKit ─────────────────────────────────
 async function initHealthKit(): Promise<boolean> {
-  if (Platform.OS !== "ios") return false
+  if (Platform.OS !== "ios" || isExpoGo) return false
   try {
     const HealthKit = require("@kingstinct/react-native-healthkit")
     const isAvailable = await HealthKit.isHealthDataAvailable()
@@ -54,7 +58,7 @@ async function getStepsFromHealthKit(start: Date, end: Date): Promise<number> {
 
 // ─── Android: Health Connect ────────────────────────
 async function initHealthConnect(): Promise<boolean> {
-  if (Platform.OS !== "android") return false
+  if (Platform.OS !== "android" || isExpoGo) return false
   try {
     const HC = require("react-native-health-connect")
     const initialized = await HC.initialize()
