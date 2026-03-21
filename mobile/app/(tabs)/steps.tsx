@@ -330,9 +330,9 @@ export default function StepsScreen() {
       "change",
       async (nextState: AppStateStatus) => {
         if (nextState === "active" && pedometerAvailable) {
-          // Re-leer pasos reales del sensor al volver
+          // Re-leer pasos reales del sensor al volver (trust pedometer, may go down on recalibration)
           const steps = await getStepsSinceMidnight();
-          if (steps > liveSteps) {
+          if (steps !== liveSteps) {
             initialStepsRef.current = steps;
             setLiveSteps(steps);
             // Re-suscribir el watcher para que acumule desde el nuevo base
@@ -377,8 +377,9 @@ export default function StepsScreen() {
     }
   };
 
-  // Use live steps if higher than backend
-  const displaySteps = Math.max(liveSteps, todayData?.steps ?? 0);
+  // Trust pedometer as source of truth when available (matches Apple Fitness behavior)
+  // Only fall back to backend value when pedometer hasn't reported yet
+  const displaySteps = liveSteps > 0 ? liveSteps : (todayData?.steps ?? 0);
   const currentGoal = todayData?.goal ?? 8500;
   const pct = Math.min(100, Math.round((displaySteps / currentGoal) * 100));
   const calories = todayData?.calories ?? Math.round(displaySteps * 0.04);

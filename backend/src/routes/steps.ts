@@ -77,17 +77,18 @@ router.post("/sync", async (req: Request, res: Response) => {
       where: { userId_date: { userId: user.id, date: targetDate } },
     })
 
-    // Los pasos solo pueden subir (o reiniciarse a medianoche)
-    if (existing && steps < existing.steps && steps > 0) {
-      // Permitir si es reset de medianoche (pasos < 500 cuando antes tenía miles)
-      if (!(steps < 500 && existing.steps > 1000)) {
-        // No es un reset legítimo — podría ser manipulación
-        // Silenciosamente usar el valor más alto
-        // No retornar error para no bloquear al usuario
+    // Allow pedometer recalibration (Apple Fitness adjusts steps down when
+    // it detects false positives like car vibrations). Block large drops
+    // (>50% decrease) as potential manipulation, but accept small corrections.
+    let finalSteps = steps
+    if (existing && existing.steps > 0) {
+      const dropPercent = (existing.steps - steps) / existing.steps
+      if (steps < existing.steps && dropPercent > 0.5 && steps > 500) {
+        // Large suspicious drop — keep existing value
+        finalSteps = existing.steps
       }
+      // Otherwise trust the device (even if it went down slightly)
     }
-
-    const finalSteps = existing ? Math.max(steps, existing.steps) : steps
     const calories = estimateCalories(finalSteps, user.weight)
     const distanceKm = estimateDistance(finalSteps, user.height)
     const activeMinutes = estimateActiveMinutes(finalSteps)
