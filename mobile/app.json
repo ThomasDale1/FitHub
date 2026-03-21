@@ -13,7 +13,13 @@
       "bundleIdentifier": "com.fithub.app",
       "infoPlist": {
         "NSMotionUsageDescription": "FitHub necesita acceso al sensor de movimiento para contar tus pasos automáticamente.",
-        "UIBackgroundModes": ["processing", "remote-notification"]
+        "NSHealthShareUsageDescription": "FitHub usa tus datos de salud para mostrar tus pasos, calorías y distancia con la misma precisión que Apple Fitness.",
+        "NSHealthUpdateUsageDescription": "FitHub guarda tu actividad de pasos en Salud para mantener un historial unificado.",
+        "UIBackgroundModes": [
+          "processing",
+          "remote-notification"
+        ],
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -28,8 +34,7 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.fithub.app",
-      "googleServicesFile": "./google-services.json"
+      "package": "com.fithub.app"
     },
     "web": {
       "output": "static",
@@ -37,6 +42,24 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "@kingstinct/react-native-healthkit",
+        {
+          "NSHealthShareUsageDescription": "FitHub usa tus datos de salud para mostrar tus pasos, calorías y distancia con la misma precisión que Apple Fitness.",
+          "NSHealthUpdateUsageDescription": "FitHub guarda tu actividad de pasos en Salud para mantener un historial unificado."
+        }
+      ],
+      "expo-health-connect",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 34,
+            "targetSdkVersion": 34,
+            "minSdkVersion": 26
+          }
+        }
+      ],
       [
         "expo-splash-screen",
         {

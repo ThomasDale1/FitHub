@@ -5,6 +5,10 @@
 // Usa expo-background-task + expo-task-manager para ejecutar
 // tareas periódicas que leen el podómetro y sincronizan al backend.
 // También re-sincroniza al volver al foreground via AppState.
+//
+// Step source priority:
+//   1. HealthKit (iOS) / Health Connect (Android) — most accurate
+//   2. CMPedometer (expo-sensors) — fallback
 // ─────────────────────────────────────────────────────
 import * as BackgroundTask from "expo-background-task"
 import * as TaskManager from "expo-task-manager"
@@ -12,23 +16,32 @@ import { Pedometer } from "expo-sensors"
 import { AppState, type AppStateStatus } from "react-native"
 import { stepsAPI, api, BG_AUTH_TOKEN_KEY } from "./api"
 import * as SecureStore from "expo-secure-store"
+import {
+  initHealthSteps,
+  getStepsSinceMidnight as healthGetSteps,
+} from "./healthSteps"
 
 // ─── Task names ──────────────────────────────────────
 export const STEP_SYNC_TASK = "STEP_SYNC_BACKGROUND_TASK"
 
 // ─── Helper: get steps since midnight ────────────────
+// Uses HealthKit/Health Connect when available, else CMPedometer
 async function getStepsSinceMidnight(): Promise<number> {
   try {
-    const available = await Pedometer.isAvailableAsync()
-    if (!available) return 0
-
-    const midnight = new Date()
-    midnight.setHours(0, 0, 0, 0)
-
-    const result = await Pedometer.getStepCountAsync(midnight, new Date())
+    const result = await healthGetSteps()
     return result.steps
   } catch {
-    return 0
+    // Ultimate fallback to raw pedometer
+    try {
+      const available = await Pedometer.isAvailableAsync()
+      if (!available) return 0
+      const midnight = new Date()
+      midnight.setHours(0, 0, 0, 0)
+      const result = await Pedometer.getStepCountAsync(midnight, new Date())
+      return result.steps
+    } catch {
+      return 0
+    }
   }
 }
 

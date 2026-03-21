@@ -21,6 +21,11 @@ import { AppState, type AppStateStatus } from "react-native";
 import { stepsAPI, type WeekDayData } from "@/lib/api";
 import { Pedometer } from "expo-sensors";
 import { getStepsSinceMidnight } from "@/lib/stepTracker";
+import {
+  initHealthSteps,
+  getStepsSinceMidnight as healthGetSteps,
+  isUsingHealthService,
+} from "@/lib/healthSteps";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const RING_SIZE = SCREEN_WIDTH * 0.6;
@@ -264,42 +269,78 @@ export default function StepsScreen() {
   const [showGoalModal, setShowGoalModal] = useState(false);
   const [pedometerAvailable, setPedometerAvailable] = useState(false);
   const [liveSteps, setLiveSteps] = useState(0);
+  const [stepSource, setStepSource] = useState<"healthkit" | "health_connect" | "pedometer">("pedometer");
   const subscriptionRef = useRef<any>(null);
+  const healthPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Ref para guardar pasos base (antes de iniciar suscripción)
   const initialStepsRef = useRef(0);
 
-  // ─── Pedometer setup ───────────────────────────────
+  // ─── Health / Pedometer setup ────────────────────────
   useEffect(() => {
-    const setupPedometer = async () => {
-      const available = await Pedometer.isAvailableAsync();
-      setPedometerAvailable(available);
+    const setup = async () => {
+      // 1. Try HealthKit / Health Connect first
+      const source = await initHealthSteps();
+      setStepSource(source);
+      const usingHealth = isUsingHealthService();
 
-      if (available) {
+      if (usingHealth) {
+        // Health platform available — read initial steps
         try {
-          const steps = await getStepsSinceMidnight();
-          initialStepsRef.current = steps;
-          setLiveSteps(steps);
-          if (steps > 0) {
-            stepsAPI.syncSteps(steps).catch(() => {});
+          const result = await healthGetSteps();
+          console.log(`🦶 [${source}] steps: ${result.steps}`);
+          setLiveSteps(result.steps);
+          setPedometerAvailable(true);
+          if (result.steps > 0) {
+            stepsAPI.syncSteps(result.steps).catch(() => {});
           }
         } catch (err) {
-          console.log("Error getting step count:", err);
+          console.log("Error getting health steps:", err);
         }
 
-        // watchStepCount devuelve pasos ACUMULADOS desde que inició
-        // la suscripción, por eso usamos initialSteps + result.steps
-        subscriptionRef.current = Pedometer.watchStepCount((result) => {
-          setLiveSteps(initialStepsRef.current + result.steps);
-        });
+        // HealthKit/Health Connect don't support real-time subscriptions
+        // like CMPedometer — poll every 10 seconds for near-real-time updates
+        healthPollRef.current = setInterval(async () => {
+          try {
+            const result = await healthGetSteps();
+            setLiveSteps(result.steps);
+          } catch {}
+        }, 10000);
+      } else {
+        // Fallback to raw CMPedometer
+        const available = await Pedometer.isAvailableAsync();
+        setPedometerAvailable(available);
+
+        if (available) {
+          try {
+            const steps = await getStepsSinceMidnight();
+            console.log(`🦶 Pedometer raw value: ${steps}`);
+            initialStepsRef.current = steps;
+            setLiveSteps(steps);
+            if (steps > 0) {
+              stepsAPI.syncSteps(steps).catch(() => {});
+            }
+          } catch (err) {
+            console.log("Error getting step count:", err);
+          }
+
+          // watchStepCount devuelve pasos ACUMULADOS desde que inició
+          // la suscripción, por eso usamos initialSteps + result.steps
+          subscriptionRef.current = Pedometer.watchStepCount((result) => {
+            setLiveSteps(initialStepsRef.current + result.steps);
+          });
+        }
       }
     };
 
-    setupPedometer();
+    setup();
 
     return () => {
       if (subscriptionRef.current) {
         subscriptionRef.current.remove();
+      }
+      if (healthPollRef.current) {
+        clearInterval(healthPollRef.current);
       }
     };
   }, []);
@@ -330,18 +371,26 @@ export default function StepsScreen() {
       "change",
       async (nextState: AppStateStatus) => {
         if (nextState === "active" && pedometerAvailable) {
-          // Re-leer pasos reales del sensor al volver (trust pedometer, may go down on recalibration)
-          const steps = await getStepsSinceMidnight();
-          if (steps !== liveSteps) {
-            initialStepsRef.current = steps;
-            setLiveSteps(steps);
-            // Re-suscribir el watcher para que acumule desde el nuevo base
-            if (subscriptionRef.current) {
-              subscriptionRef.current.remove();
+          if (isUsingHealthService()) {
+            // Re-read from HealthKit / Health Connect
+            try {
+              const result = await healthGetSteps();
+              setLiveSteps(result.steps);
+            } catch {}
+          } else {
+            // Re-read from CMPedometer
+            const steps = await getStepsSinceMidnight();
+            if (steps !== liveSteps) {
+              initialStepsRef.current = steps;
+              setLiveSteps(steps);
+              // Re-subscribe watcher to accumulate from new base
+              if (subscriptionRef.current) {
+                subscriptionRef.current.remove();
+              }
+              subscriptionRef.current = Pedometer.watchStepCount((result) => {
+                setLiveSteps(steps + result.steps);
+              });
             }
-            subscriptionRef.current = Pedometer.watchStepCount((result) => {
-              setLiveSteps(steps + result.steps);
-            });
           }
           // Refresh backend data too
           fetchData();
@@ -382,9 +431,12 @@ export default function StepsScreen() {
   const displaySteps = liveSteps > 0 ? liveSteps : (todayData?.steps ?? 0);
   const currentGoal = todayData?.goal ?? 8500;
   const pct = Math.min(100, Math.round((displaySteps / currentGoal) * 100));
-  const calories = todayData?.calories ?? Math.round(displaySteps * 0.04);
-  const distance = todayData?.distanceKm ?? Math.round((displaySteps * 0.762) / 10) / 100;
-  const activeMin = todayData?.activeMinutes ?? Math.round(displaySteps / 100);
+  // Recalculate stats from displaySteps when pedometer is active,
+  // so they stay consistent with the pedometer count (not the backend's stale value)
+  const usingPedometer = liveSteps > 0;
+  const calories = usingPedometer ? Math.round(displaySteps * 0.04) : (todayData?.calories ?? Math.round(displaySteps * 0.04));
+  const distance = usingPedometer ? Math.round((displaySteps * 0.762) / 10) / 100 : (todayData?.distanceKm ?? Math.round((displaySteps * 0.762) / 10) / 100);
+  const activeMin = usingPedometer ? Math.round(displaySteps / 100) : (todayData?.activeMinutes ?? Math.round(displaySteps / 100));
   const activeHours = Math.floor(activeMin / 60);
   const activeRemainder = activeMin % 60;
 
@@ -425,15 +477,22 @@ export default function StepsScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* ─── Pedometer status ────────────────────── */}
-          {!pedometerAvailable && (
+          {/* ─── Step source status ────────────────────── */}
+          {!pedometerAvailable ? (
             <View className="bg-background-card border border-amber-500/20 rounded-2xl p-3 mb-4 flex-row items-center gap-x-2">
               <Ionicons name="warning-outline" size={16} color="#F59E0B" />
               <Text className="text-text-secondary text-xs flex-1">
                 Podómetro no disponible. Los pasos se sincronizarán manualmente.
               </Text>
             </View>
-          )}
+          ) : stepSource !== "pedometer" ? (
+            <View className="bg-background-card border border-green-500/20 rounded-2xl p-3 mb-4 flex-row items-center gap-x-2">
+              <Ionicons name="heart-circle-outline" size={16} color="#00D48A" />
+              <Text className="text-text-secondary text-xs flex-1">
+                {stepSource === "healthkit" ? "Apple Health" : "Health Connect"} — mayor precisión
+              </Text>
+            </View>
+          ) : null}
 
           {/* ─── PROGRESS RING ──────────────────────── */}
           <View className="items-center mb-6">
