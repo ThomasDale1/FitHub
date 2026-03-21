@@ -8,6 +8,14 @@
       "developmentClient": true,
       "distribution": "internal",
       "node": "22.16.0",
+      "env": {
+        "NPM_CONFIG_LEGACY_PEER_DEPS": "true"
+      }
+    },
+    "development-simulator": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "node": "22.16.0",
       "ios": {
         "simulator": true
       },
