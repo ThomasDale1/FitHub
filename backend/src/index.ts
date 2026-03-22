@@ -17,6 +17,8 @@ import challengesRouter from "./routes/challenges.js";
 import badgesRouter from "./routes/badges.js";
 import stepsRouter from './routes/steps.js'
 import pushTokensRouter from './routes/pushTokens.js'
+import onboardingRouter from './routes/onboarding.js'
+import placesRouter from './routes/places.js'
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -79,7 +81,9 @@ app.use("/api/social", socialRouter);
 app.use("/api/challenges", challengesRouter); 
 app.use("/api/badges", badgesRouter);
 app.use("/api/steps", stepsRouter)
-app.use("/api/push-token", pushTokensRouter)       
+app.use("/api/push-token", pushTokensRouter)
+app.use("/api/onboarding", onboardingRouter)
+app.use("/api/places", placesRouter)       
 
 // ─── INICIAR SERVIDOR ─────────────────────────────────
 app.listen(PORT, () => {

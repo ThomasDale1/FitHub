@@ -97,6 +97,14 @@ export interface UserProfile {
   streak: number;
   lastWorkout: string | null;
   createdAt: string;
+  // Onboarding
+  dateOfBirth: string | null;
+  gender: string | null;
+  experienceLevel: string | null;
+  weeklyTrainingDays: number | null;
+  onboardingCompleted: boolean;
+  onboardingStep: number;
+  primaryPlace: { id: string; name: string; type: string } | null;
 }
 
 export interface UserStats {
@@ -461,6 +469,9 @@ export const userAPI = {
   getGoals: () => api.get<Goal[]>("/api/users/goals"),
   createGoal: (data: { title: string; description?: string; targetValue?: number; unit?: string }) =>
     api.post<Goal>("/api/users/goals", data),
+
+  getSuggestions: () =>
+    api.get<UserSuggestionData[]>("/api/users/suggestions"),
 };
 
 // ─── Workout API ──────────────────────────────────────
@@ -649,6 +660,79 @@ export const badgesAPI = {
   markSeen: (slug: string) => api.put(`/api/badges/${slug}/seen`),
   setFeatured: (badgeSlug: string | null) =>
     api.put("/api/badges/featured", { badgeSlug }),
+};
+
+// ─── Onboarding Types ────────────────────────────────
+export interface PlaceData {
+  id: string;
+  name: string;
+  type: "GYM" | "UNIVERSITY" | "CLUB" | "PARK" | "OTHER";
+  address: string | null;
+  latitude: number;
+  longitude: number;
+  membersCount: number;
+  distance?: number;
+  createdBy?: { id: string; name: string };
+}
+
+export interface UserSuggestionData {
+  id: string;
+  name: string;
+  username: string;
+  avatarUrl: string | null;
+  xp: number;
+  level: number;
+  streak: number;
+  bio: string | null;
+  experienceLevel: string | null;
+  workoutsCount: number;
+  sharedHobbies: string[];
+  placeName: string | null;
+  sameGym: boolean;
+  score: number;
+}
+
+// ─── Onboarding API ─────────────────────────────────
+export const onboardingAPI = {
+  savePersonalInfo: (data: {
+    dateOfBirth?: string;
+    gender?: string;
+    weight?: number;
+    height?: number;
+    bodyFat?: number;
+  }) => api.post("/api/onboarding/personal-info", data),
+
+  saveGoals: (goals: Array<{ slug: string; customText?: string }>) =>
+    api.post("/api/onboarding/goals", { goals }),
+
+  saveHobbies: (hobbies: string[]) =>
+    api.post("/api/onboarding/hobbies", { hobbies }),
+
+  saveExperience: (data: { experienceLevel: string; weeklyTrainingDays?: number }) =>
+    api.post("/api/onboarding/experience", data),
+
+  complete: () => api.post("/api/onboarding/complete"),
+};
+
+// ─── Places API ──────────────────────────────────────
+export const placesAPI = {
+  nearby: (lat: number, lng: number, radius?: number) =>
+    api.get<PlaceData[]>(`/api/places/nearby?lat=${lat}&lng=${lng}&radius=${radius || 5}`),
+
+  search: (q: string) =>
+    api.get<PlaceData[]>(`/api/places/search?q=${encodeURIComponent(q)}`),
+
+  create: (data: { name: string; type?: string; address?: string; latitude: number; longitude: number }) =>
+    api.post<PlaceData>("/api/places", data),
+
+  join: (placeId: string) =>
+    api.post(`/api/places/${placeId}/join`),
+
+  leave: (placeId: string) =>
+    api.delete(`/api/places/${placeId}/leave`),
+
+  members: (placeId: string) =>
+    api.get(`/api/places/${placeId}/members`),
 };
 
 // ─── Push Token API ──────────────────────────────────

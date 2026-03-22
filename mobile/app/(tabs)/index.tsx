@@ -20,7 +20,7 @@ import StreakBadge from "@/components/StreakBadge";
 import XPBar from "@/components/XPBar";
 import WorkoutCard from "@/components/WorkoutCard";
 import { useDashboard } from "@/hooks/useUserData";
-import { socialAPI } from "@/lib/api";
+import { socialAPI, userAPI } from "@/lib/api";
 
 // Fallback para cuando el backend no responde
 const FALLBACK_DATA = {
@@ -48,6 +48,25 @@ export default function DashboardScreen() {
   const { data, loading, error, refetch } = useDashboard();
   const [refreshing, setRefreshing] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+
+  // Check onboarding status — redirect if not completed
+  useEffect(() => {
+    const checkOnboarding = async () => {
+      try {
+        const res = await userAPI.getProfile();
+        if (res.data && !res.data.onboardingCompleted) {
+          const step = res.data.onboardingStep || 0;
+          const screens = [
+            "personal-info", "goals", "hobbies", "experience",
+            "location", "connect", "first-challenge",
+          ];
+          const target = screens[Math.min(step, screens.length - 1)];
+          router.replace(`/(onboarding)/${target}` as any);
+        }
+      } catch {}
+    };
+    checkOnboarding();
+  }, []);
 
   // Fetch unread notifications
   useEffect(() => {

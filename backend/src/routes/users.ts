@@ -17,6 +17,13 @@ async function getUserByClerkId(clerkId: string) {
     where: { clerkId },
     include: {
       featuredBadge: { select: { id: true, slug: true, name: true, icon: true, rarity: true } },
+      hobbies: { select: { hobbySlug: true } },
+      goalPreferences: { select: { goalSlug: true, customText: true } },
+      places: {
+        where: { isPrimary: true },
+        take: 1,
+        include: { place: { select: { id: true, name: true, type: true } } },
+      },
     },
   })
 }
@@ -113,6 +120,9 @@ router.get("/me", async (req: Request, res: Response) => {
       maxXP: levelInfo.maxXP,
       streak,
       featuredBadge: user.featuredBadge || null,
+      onboardingCompleted: user.onboardingCompleted,
+      onboardingStep: user.onboardingStep,
+      primaryPlace: user.places[0]?.place || null,
     })
   } catch (error) {
     res.status(500).json({ error: "Error al obtener perfil" })
@@ -481,6 +491,111 @@ router.get("/goals", async (req: Request, res: Response) => {
     res.json(goals)
   } catch (error) {
     res.status(500).json({ error: "Error al obtener metas" })
+  }
+})
+
+// ═══════════════════════════════════════════════════════
+// GET /api/users/suggestions — People like you (onboarding)
+// Score-based: same gym, shared hobbies, similar age/level
+// ═══════════════════════════════════════════════════════
+router.get("/suggestions", async (req: Request, res: Response) => {
+  try {
+    const { userId: clerkId } = getAuth(req)
+    const user = await prisma.user.findUnique({
+      where: { clerkId: clerkId! },
+      include: {
+        hobbies: true,
+        places: { where: { isPrimary: true }, take: 1 },
+      },
+    })
+
+    if (!user) { res.status(404).json({ error: "Usuario no encontrado" }); return }
+
+    const myHobbySlugs = user.hobbies.map((h) => h.hobbySlug)
+    const myPlaceId = user.places[0]?.placeId || null
+
+    // Get users who are NOT me, with their hobbies and places
+    const candidates = await prisma.user.findMany({
+      where: {
+        id: { not: user.id },
+        onboardingCompleted: true,
+      },
+      select: {
+        id: true,
+        name: true,
+        username: true,
+        avatarUrl: true,
+        xp: true,
+        level: true,
+        streak: true,
+        bio: true,
+        dateOfBirth: true,
+        experienceLevel: true,
+        hobbies: { select: { hobbySlug: true } },
+        places: { where: { isPrimary: true }, select: { placeId: true, place: { select: { name: true } } } },
+        _count: { select: { workouts: { where: { isCompleted: true } } } },
+      },
+      take: 100,
+    })
+
+    // Calculate compatibility score
+    const myAge = user.dateOfBirth
+      ? Math.floor((Date.now() - user.dateOfBirth.getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+      : null
+
+    const scored = candidates.map((c) => {
+      let score = 0
+
+      // Same gym: +40
+      if (myPlaceId && c.places.some((p) => p.placeId === myPlaceId)) {
+        score += 40
+      }
+
+      // Shared hobbies: +20 each
+      const theirHobbies = c.hobbies.map((h) => h.hobbySlug)
+      const sharedHobbies = myHobbySlugs.filter((s) => theirHobbies.includes(s))
+      score += sharedHobbies.length * 20
+
+      // Similar age (±5 years): +10
+      if (myAge && c.dateOfBirth) {
+        const theirAge = Math.floor((Date.now() - c.dateOfBirth.getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+        if (Math.abs(myAge - theirAge) <= 5) score += 10
+      }
+
+      // Same experience level: +10
+      if (user.experienceLevel && c.experienceLevel === user.experienceLevel) {
+        score += 10
+      }
+
+      // Has avatar: +5
+      if (c.avatarUrl) score += 5
+
+      return {
+        id: c.id,
+        name: c.name,
+        username: c.username,
+        avatarUrl: c.avatarUrl,
+        xp: c.xp,
+        level: c.level,
+        streak: c.streak,
+        bio: c.bio,
+        experienceLevel: c.experienceLevel,
+        workoutsCount: c._count.workouts,
+        sharedHobbies,
+        placeName: c.places[0]?.place?.name || null,
+        sameGym: myPlaceId ? c.places.some((p) => p.placeId === myPlaceId) : false,
+        score,
+      }
+    })
+
+    // Sort by score desc, take top 20
+    scored.sort((a, b) => b.score - a.score)
+    const suggestions = scored.slice(0, 20).filter((s) => s.score > 0)
+
+    res.json(suggestions)
+  } catch (error) {
+    console.error("Suggestions error:", error)
+    res.status(500).json({ error: "Error al obtener sugerencias" })
   }
 })
 

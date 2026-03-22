@@ -30,6 +30,15 @@ model User {
   streak          Int       @default(0)
   lastWorkout     DateTime?
   featuredBadgeId String?
+
+  // Onboarding
+  dateOfBirth         DateTime?
+  gender              String?
+  experienceLevel     String?
+  weeklyTrainingDays  Int?
+  onboardingCompleted Boolean   @default(false)
+  onboardingStep      Int       @default(0)
+
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -59,6 +68,12 @@ model User {
   dailySteps               DailySteps[]
   pushTokens               PushToken[]
   media                    Media[]
+
+  // Onboarding relations
+  goalPreferences          UserGoalPreference[]
+  hobbies                  UserHobby[]
+  places                   UserPlace[]
+  createdPlaces            Place[]                  @relation("PlaceCreator")
 
   @@map("users")
 }
@@ -675,4 +690,77 @@ model DailySteps {
 
   @@unique([userId, date])
   @@map("daily_steps")
+}
+
+// ─── ONBOARDING: GOAL PREFERENCES ───────────────────
+model UserGoalPreference {
+  id         String   @id @default(cuid())
+  userId     String
+  goalSlug   String
+  customText String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, goalSlug])
+  @@map("user_goal_preferences")
+}
+
+// ─── ONBOARDING: HOBBIES ────────────────────────────
+model UserHobby {
+  id        String @id @default(cuid())
+  userId    String
+  hobbySlug String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, hobbySlug])
+  @@map("user_hobbies")
+}
+
+// ─── PLACES (Gyms, Universities, etc.) ──────────────
+enum PlaceType {
+  GYM
+  UNIVERSITY
+  CLUB
+  PARK
+  OTHER
+}
+
+model Place {
+  id          String    @id @default(cuid())
+  name        String
+  type        PlaceType @default(GYM)
+  address     String?
+  latitude    Float
+  longitude   Float
+  createdById String
+
+  createdBy User      @relation("PlaceCreator", fields: [createdById], references: [id])
+  members   UserPlace[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([latitude, longitude])
+  @@map("places")
+}
+
+// ─── USER ↔ PLACE ───────────────────────────────────
+model UserPlace {
+  id        String  @id @default(cuid())
+  userId    String
+  placeId   String
+  isPrimary Boolean @default(true)
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  place Place @relation(fields: [placeId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, placeId])
+  @@map("user_places")
 }

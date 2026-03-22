@@ -151,7 +151,7 @@ export default function SignUpScreen() {
         avoidKeyboard
         onModalHide={() => {
           if (verification.state === "success") {
-            router.replace("/(tabs)");
+            router.replace("/(onboarding)/personal-info" as any);
           }
         }}
       >
@@ -197,8 +197,8 @@ export default function SignUpScreen() {
             Tu cuenta ha sido creada exitosamente.
           </Text>
           <CustomButton
-            title="¡Ir a Fit Hub!"
-            onPress={() => router.replace("/(tabs)")}
+            title="¡Personalizar mi experiencia!"
+            onPress={() => router.replace("/(onboarding)/personal-info" as any)}
             className="w-full"
           />
         </View>
