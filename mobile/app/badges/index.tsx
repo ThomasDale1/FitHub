@@ -345,7 +345,10 @@ export default function BadgesScreen() {
   }, []);
 
   useEffect(() => {
-    fetchBadges().finally(() => setLoading(false));
+    // First check & award any earned badges, then fetch the full list
+    badgesAPI.check()
+      .catch(() => {})
+      .finally(() => fetchBadges().finally(() => setLoading(false)));
   }, [fetchBadges]);
 
   const onRefresh = useCallback(async () => {

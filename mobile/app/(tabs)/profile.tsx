@@ -248,9 +248,13 @@ export default function ProfileScreen() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [badgesData, setBadgesData] = useState<BadgesResponse | null>(null);
 
-  // Fetch badges from API
+  // Check & fetch badges from API
   useEffect(() => {
-    badgesAPI.getAll().then((res) => setBadgesData(res.data)).catch(() => {});
+    badgesAPI.check()
+      .catch(() => {})
+      .finally(() => {
+        badgesAPI.getAll().then((res) => setBadgesData(res.data)).catch(() => {});
+      });
   }, []);
 
   const onRefresh = useCallback(async () => {
@@ -639,7 +643,7 @@ export default function ProfileScreen() {
             </Text>
             <TouchableOpacity
               className="flex-row items-center gap-x-1"
-              onPress={() => router.push("/badges/index" as any)}
+              onPress={() => router.push("/badges" as any)}
             >
               <Text className="text-primary text-sm font-semibold">
                 {earnedCount}/{totalBadgeCount}
@@ -666,7 +670,7 @@ export default function ProfileScreen() {
                 borderColor: "#252540",
                 borderStyle: "dashed",
               }}
-              onPress={() => router.push("/badges/index" as any)}
+              onPress={() => router.push("/badges" as any)}
             >
               <Ionicons name="trophy-outline" size={24} color="#6C63FF" />
               <Text className="text-primary text-xs mt-1 font-semibold">
