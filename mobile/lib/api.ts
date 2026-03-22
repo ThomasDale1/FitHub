@@ -325,6 +325,20 @@ export interface LeaderboardUser {
   unit: string;
 }
  
+export interface FeaturedBadge {
+  id: string;
+  slug: string;
+  name: string;
+  icon: string;
+  rarity: "COMMON" | "RARE" | "EPIC" | "LEGENDARY";
+}
+
+export interface BadgeProgress {
+  current: number;
+  target: number;
+  percentage: number;
+}
+
 export interface BadgeData {
   id: string;
   slug: string;
@@ -332,9 +346,41 @@ export interface BadgeData {
   description: string;
   icon: string;
   category: string;
+  rarity: "COMMON" | "RARE" | "EPIC" | "LEGENDARY";
   xpReward: number;
+  isSecret: boolean;
   earned: boolean;
   earnedAt: string | null;
+  isSeen: boolean;
+  progress: BadgeProgress | null;
+}
+
+export interface BadgesResponse {
+  badges: BadgeData[];
+  grouped: Record<string, BadgeData[]>;
+  stats: {
+    total: number;
+    earned: number;
+    percentage: number;
+    byRarity: Record<string, { total: number; earned: number }>;
+  };
+  nearCompletion: BadgeData[];
+  unseen: BadgeData[];
+  featuredBadge: FeaturedBadge | null;
+}
+
+export interface BadgeCheckResponse {
+  newBadges: Array<{
+    slug: string;
+    name: string;
+    description: string;
+    icon: string;
+    rarity: string;
+    xpReward: number;
+    isSecret: boolean;
+  }>;
+  xpEarned: number;
+  totalBadges: number;
 }
  
 export interface UserSuggestion {
@@ -595,11 +641,14 @@ export const challengesAPI = {
     ),
 };
  
-// ─── Badges API (Sprint 4) ───────────────────────────
+// ─── Badges API ─────────────────────────────────────
 export const badgesAPI = {
-  getAll: () => api.get("/api/badges"),
-  check: () => api.post("/api/badges/check"),
+  getAll: () => api.get<BadgesResponse>("/api/badges"),
+  check: () => api.post<BadgeCheckResponse>("/api/badges/check"),
   seed: () => api.post("/api/badges/seed"),
+  markSeen: (slug: string) => api.put(`/api/badges/${slug}/seen`),
+  setFeatured: (badgeSlug: string | null) =>
+    api.put("/api/badges/featured", { badgeSlug }),
 };
 
 // ─── Push Token API ──────────────────────────────────

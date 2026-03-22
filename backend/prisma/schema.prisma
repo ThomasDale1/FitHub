@@ -25,13 +25,15 @@ model User {
   carbsGoal      Float?
   fatGoal        Float?
   activityLevel  String?
-  xp          Int       @default(0)
-  level       Int       @default(1)
-  streak      Int       @default(0)
-  lastWorkout DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  xp              Int       @default(0)
+  level           Int       @default(1)
+  streak          Int       @default(0)
+  lastWorkout     DateTime?
+  featuredBadgeId String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
+  featuredBadge    Badge?    @relation("FeaturedBadge", fields: [featuredBadgeId], references: [id])
   workouts         Workout[]
   goals            Goal[]
   foodLogs         FoodLog[]
@@ -267,11 +269,22 @@ enum ChallengeStatus {
 
 enum BadgeCategory {
   WORKOUT
+  VOLUME
   SOCIAL
   NUTRITION
   STREAK
   CHALLENGE
   MILESTONE
+  STEPS
+  PR
+  SECRET
+}
+
+enum BadgeRarity {
+  COMMON
+  RARE
+  EPIC
+  LEGENDARY
 }
 
 // ─── RÉCORD PERSONAL ──────────────────────────────────
@@ -552,19 +565,26 @@ model Badge {
   description String
   icon        String
   category    BadgeCategory
+  rarity      BadgeRarity   @default(COMMON)
   requirement Json
   xpReward    Int           @default(50)
+  isSecret    Boolean       @default(false)
+  sortOrder   Int           @default(0)
 
-  userBadges UserBadge[]
+  userBadges    UserBadge[]
+  featuredUsers User[]      @relation("FeaturedBadge")
+
+  createdAt DateTime @default(now())
 
   @@map("badges")
 }
 
 // ─── USER BADGES ──────────────────────────────────────
 model UserBadge {
-  id      String @id @default(cuid())
+  id      String  @id @default(cuid())
   userId  String
   badgeId String
+  isSeen  Boolean @default(false)
 
   user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
   badge Badge @relation(fields: [badgeId], references: [id], onDelete: Cascade)

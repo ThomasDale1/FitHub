@@ -15,6 +15,9 @@ router.use(requireAuth)
 async function getUserByClerkId(clerkId: string) {
   return prisma.user.findUnique({
     where: { clerkId },
+    include: {
+      featuredBadge: { select: { id: true, slug: true, name: true, icon: true, rarity: true } },
+    },
   })
 }
 
@@ -109,6 +112,7 @@ router.get("/me", async (req: Request, res: Response) => {
       currentXP: levelInfo.currentXP,
       maxXP: levelInfo.maxXP,
       streak,
+      featuredBadge: user.featuredBadge || null,
     })
   } catch (error) {
     res.status(500).json({ error: "Error al obtener perfil" })
@@ -353,6 +357,7 @@ router.get("/dashboard", async (req: Request, res: Response) => {
         currentXP: levelInfo.currentXP,
         maxXP: levelInfo.maxXP,
         streak,
+        featuredBadge: user.featuredBadge || null,
       },
       weekStats: {
         workouts: workoutsThisWeek,

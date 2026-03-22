@@ -285,56 +285,14 @@ router.post("/:id/finish", async (req: Request, res: Response) => {
 
     // ─── CHECK BADGES después de cada workout ──────
     // (non-blocking, no falla el workout)
+    // The badge system handles milestone checks, notifications, and auto-posts
     try {
-      // Importar la lógica inline para no crear dependencia circular
-      const totalWorkouts = await prisma.workout.count({
-        where: { userId: userId!, isCompleted: true },
-      })
-      const volumeAgg = await prisma.workout.aggregate({
-        where: { userId: userId!, isCompleted: true },
-        _sum: { totalVolume: true },
-      })
-      const totalPRs = await prisma.personalRecord.count({
-        where: { userId: userId! },
-      })
-      const userUpdated = await prisma.user.findUnique({
-        where: { id: userId! },
-        select: { xp: true, streak: true },
-      })
-
-      // Check milestones y crear notificaciones
-      const milestones = [
-        { count: 1, msg: "¡Primer workout completado! 🎉" },
-        { count: 10, msg: "¡10 workouts completados! 💪" },
-        { count: 25, msg: "¡25 workouts! Vas en serio 🔥" },
-        { count: 50, msg: "¡50 workouts! Eres una máquina ⚡" },
-        { count: 100, msg: "¡100 workouts! Centurión 🌟" },
-      ]
-
-      for (const m of milestones) {
-        if (totalWorkouts === m.count) {
-          await prisma.notification.create({
-            data: {
-              userId: userId!,
-              type: "milestone",
-              title: m.msg,
-              data: { workouts: totalWorkouts },
-            },
-          })
-          sendPushToUser(userId!, "🏆 Milestone!", m.msg, { type: "milestone" })
-          // Milestone post
-          await prisma.post.create({
-            data: {
-              userId: userId!,
-              content: m.msg,
-              postType: "MILESTONE",
-              isPublic: true,
-            },
-          })
-        }
-      }
+      const { checkBadgesForUser } = await import("./badges.js")
+      checkBadgesForUser(userId!).catch((err: any) =>
+        console.error("Badge check error (non-blocking):", err)
+      )
     } catch (badgeErr) {
-      console.error("Badge check error (non-blocking):", badgeErr)
+      console.error("Badge check import error (non-blocking):", badgeErr)
     }
 
     // Push notification de workout completado

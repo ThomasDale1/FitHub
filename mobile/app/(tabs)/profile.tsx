@@ -22,11 +22,11 @@ import { useUser, useAuth } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { router } from "expo-router";
 import { useProfile, useUserStats } from "@/hooks/useUserData";
 import XPBar from "@/components/XPBar";
-import { api } from "@/lib/api";
+import { api, badgesAPI, BadgeData, BadgesResponse } from "@/lib/api";
 import { pickAvatar } from "@/lib/mediaPicker";
 import { uploadToCloudinary, transforms } from "@/lib/cloudinary";
 
@@ -56,33 +56,38 @@ function ProfileStat({
   );
 }
 
+// ─── Rarity colors ───────────────────────────────────
+const RARITY_COLORS: Record<string, { border: string; text: string }> = {
+  COMMON: { border: "#6B7280", text: "#9CA3AF" },
+  RARE: { border: "#3B82F6", text: "#60A5FA" },
+  EPIC: { border: "#A855F7", text: "#C084FC" },
+  LEGENDARY: { border: "#F59E0B", text: "#FBBF24" },
+};
+
 // ─── Achievement Badge ───────────────────────────────
 function AchievementBadge({
-  icon,
-  label,
-  earned,
+  badge,
 }: {
-  icon: string;
-  label: string;
-  earned: boolean;
+  badge: BadgeData;
 }) {
+  const rarity = RARITY_COLORS[badge.rarity] || RARITY_COLORS.COMMON;
   return (
     <View
-      className={`items-center p-3 rounded-2xl ${
-        earned
-          ? "bg-primary/10 border border-primary/30"
-          : "bg-background-elevated/50 border border-background-elevated"
-      }`}
-      style={{ width: 80 }}
+      className="items-center p-3 rounded-2xl"
+      style={{
+        width: 80,
+        backgroundColor: badge.earned ? rarity.border + "15" : "#252540",
+        borderWidth: 1,
+        borderColor: badge.earned ? rarity.border + "50" : "#252540",
+      }}
     >
-      <Text className="text-2xl">{icon}</Text>
+      <Text className="text-2xl">{badge.icon}</Text>
       <Text
-        className={`text-xs mt-1 text-center ${
-          earned ? "text-primary" : "text-text-muted"
-        }`}
+        className="text-xs mt-1 text-center"
+        style={{ color: badge.earned ? rarity.text : "#4A4A5A" }}
         numberOfLines={2}
       >
-        {label}
+        {badge.name}
       </Text>
     </View>
   );
@@ -241,10 +246,20 @@ export default function ProfileScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [editing, setEditing] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [badgesData, setBadgesData] = useState<BadgesResponse | null>(null);
+
+  // Fetch badges from API
+  useEffect(() => {
+    badgesAPI.getAll().then((res) => setBadgesData(res.data)).catch(() => {});
+  }, []);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await Promise.all([refetch(), refetchStats()]);
+    await Promise.all([
+      refetch(),
+      refetchStats(),
+      badgesAPI.getAll().then((res) => setBadgesData(res.data)).catch(() => {}),
+    ]);
     setRefreshing(false);
   }, [refetch, refetchStats]);
 
@@ -292,51 +307,19 @@ export default function ProfileScreen() {
     clerkUser?.imageUrl ||
     null;
 
-  // Calcular achievements basados en stats
-  const achievements = [
-    {
-      icon: "🏋️",
-      label: "Primera vez",
-      earned: (stats?.totalWorkouts ?? 0) >= 1,
-    },
-    {
-      icon: "🔥",
-      label: "10 workouts",
-      earned: (stats?.totalWorkouts ?? 0) >= 10,
-    },
-    {
-      icon: "💪",
-      label: "50 workouts",
-      earned: (stats?.totalWorkouts ?? 0) >= 50,
-    },
-    {
-      icon: "🏆",
-      label: "Primer PR",
-      earned: (stats?.totalPRs ?? 0) >= 1,
-    },
-    {
-      icon: "⚡",
-      label: "1 ton vol.",
-      earned: (stats?.totalVolume ?? 0) >= 1000,
-    },
-    {
-      icon: "🎯",
-      label: "10 PRs",
-      earned: (stats?.totalPRs ?? 0) >= 10,
-    },
-    {
-      icon: "🌟",
-      label: "100 workouts",
-      earned: (stats?.totalWorkouts ?? 0) >= 100,
-    },
-    {
-      icon: "👑",
-      label: "Leyenda",
-      earned: (stats?.totalWorkouts ?? 0) >= 365,
-    },
-  ];
+  // Badges from API — show first 8 for profile preview
+  const profileBadges = (badgesData?.badges || [])
+    .filter((b) => !b.isSecret || b.earned)
+    .sort((a, b) => {
+      // Earned first, then by rarity desc
+      if (a.earned !== b.earned) return a.earned ? -1 : 1;
+      const rarityOrder = { LEGENDARY: 4, EPIC: 3, RARE: 2, COMMON: 1 };
+      return (rarityOrder[b.rarity] || 0) - (rarityOrder[a.rarity] || 0);
+    })
+    .slice(0, 8);
 
-  const earnedCount = achievements.filter((a) => a.earned).length;
+  const earnedCount = badgesData?.stats.earned ?? 0;
+  const totalBadgeCount = badgesData?.stats.total ?? 0;
 
   // Formatear tiempo total
   const totalHours = stats
@@ -452,9 +435,32 @@ export default function ProfileScreen() {
             <Text className="text-white text-xl font-bold mt-3">
               {profile?.name || clerkUser?.fullName || "Atleta"}
             </Text>
-            <Text className="text-text-secondary text-sm">
-              @{profile?.username || clerkUser?.username || "usuario"}
-            </Text>
+            <View className="flex-row items-center gap-x-2 mt-0.5">
+              <Text className="text-text-secondary text-sm">
+                @{profile?.username || clerkUser?.username || "usuario"}
+              </Text>
+              {badgesData?.featuredBadge && (
+                <View
+                  className="flex-row items-center rounded-full px-2 py-0.5"
+                  style={{
+                    backgroundColor: (RARITY_COLORS[badgesData.featuredBadge.rarity]?.border || "#6B7280") + "20",
+                    borderWidth: 1,
+                    borderColor: (RARITY_COLORS[badgesData.featuredBadge.rarity]?.border || "#6B7280") + "50",
+                  }}
+                >
+                  <Text style={{ fontSize: 12 }}>{badgesData.featuredBadge.icon}</Text>
+                  <Text
+                    className="ml-1 font-semibold"
+                    style={{
+                      fontSize: 10,
+                      color: RARITY_COLORS[badgesData.featuredBadge.rarity]?.text || "#9CA3AF",
+                    }}
+                  >
+                    {badgesData.featuredBadge.name}
+                  </Text>
+                </View>
+              )}
+            </View>
 
             {profile?.bio && (
               <Text className="text-text-secondary text-sm text-center mt-2 px-8">
@@ -631,9 +637,15 @@ export default function ProfileScreen() {
             <Text className="text-white font-bold text-lg">
               Logros
             </Text>
-            <Text className="text-text-secondary text-sm">
-              {earnedCount}/{achievements.length}
-            </Text>
+            <TouchableOpacity
+              className="flex-row items-center gap-x-1"
+              onPress={() => router.push("/badges/index" as any)}
+            >
+              <Text className="text-primary text-sm font-semibold">
+                {earnedCount}/{totalBadgeCount}
+              </Text>
+              <Ionicons name="chevron-forward" size={14} color="#6C63FF" />
+            </TouchableOpacity>
           </View>
 
           <ScrollView
@@ -641,14 +653,26 @@ export default function ProfileScreen() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={{ gap: 10 }}
           >
-            {achievements.map((badge, index) => (
-              <AchievementBadge
-                key={index}
-                icon={badge.icon}
-                label={badge.label}
-                earned={badge.earned}
-              />
+            {profileBadges.map((b) => (
+              <AchievementBadge key={b.id} badge={b} />
             ))}
+            {/* "Ver todos" card */}
+            <TouchableOpacity
+              className="items-center justify-center p-3 rounded-2xl"
+              style={{
+                width: 80,
+                backgroundColor: "#1A1A2E",
+                borderWidth: 1,
+                borderColor: "#252540",
+                borderStyle: "dashed",
+              }}
+              onPress={() => router.push("/badges/index" as any)}
+            >
+              <Ionicons name="trophy-outline" size={24} color="#6C63FF" />
+              <Text className="text-primary text-xs mt-1 font-semibold">
+                Ver todos
+              </Text>
+            </TouchableOpacity>
           </ScrollView>
 
           {/* ─── MEMBER SINCE ──────────────────────── */}
