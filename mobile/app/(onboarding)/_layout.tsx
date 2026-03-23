@@ -1,6 +1,15 @@
+import { useEffect } from "react";
 import { Stack } from "expo-router";
+import { useAuth } from "@clerk/clerk-expo";
+import { setGetTokenFn } from "@/lib/api";
 
 export default function OnboardingLayout() {
+  const { getToken } = useAuth();
+
+  useEffect(() => {
+    setGetTokenFn(getToken);
+  }, [getToken]);
+
   return (
     <Stack
       screenOptions={{
