@@ -144,14 +144,20 @@ export default function LocationScreen() {
       setSearching(true);
       setShowSearchResults(true);
       try {
-        // Fetch from both sources in parallel
+        // Fetch from both sources in parallel — both have fallbacks
         const [dbRes, googleRes] = await Promise.all([
-          placesAPI.search(searchQuery).catch(() => ({ data: [] as PlaceData[] })),
-          googlePlacesAPI.textSearch(searchQuery, userLocation?.lat, userLocation?.lng),
+          placesAPI.search(searchQuery).catch((e) => {
+            console.warn("DB places search failed:", e?.response?.status ?? e.message);
+            return { data: [] as PlaceData[] };
+          }),
+          googlePlacesAPI.textSearch(searchQuery, userLocation?.lat, userLocation?.lng).catch((e) => {
+            console.warn("Google Places search failed:", e);
+            return [] as Awaited<ReturnType<typeof googlePlacesAPI.textSearch>>;
+          }),
         ]);
 
         // Convert DB results
-        const dbResults: UnifiedPlace[] = dbRes.data.map((p) => ({
+        const dbResults: UnifiedPlace[] = (dbRes.data ?? []).map((p) => ({
           id: p.id,
           name: p.name,
           address: p.address,
