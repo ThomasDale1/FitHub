@@ -30,6 +30,10 @@ yarn-error.*
 .DS_Store
 *.pem
 
+# keystores
+*.jks
+*.keystore
+
 # local env files
 .env*.local
 *.env
