@@ -662,6 +662,185 @@ export const badgesAPI = {
     api.put("/api/badges/featured", { badgeSlug }),
 };
 
+// ─── Enhanced Profile Types ─────────────────────────
+export interface ProfileComboData {
+  id: string;
+  name: string;
+  username: string;
+  avatarUrl: string | null;
+  bio: string | null;
+  experienceLevel: string | null;
+  createdAt: string;
+  xp: number;
+  level: number;
+  currentXP: number;
+  maxXP: number;
+  streak: number;
+  bestStreak: number;
+  weight: number | null;
+  height: number | null;
+  bodyFat: number | null;
+  initialWeight: number | null;
+  initialBodyFat: number | null;
+  followersCount: number;
+  followingCount: number;
+  isFollowing: boolean;
+  isOwnProfile: boolean;
+  badgesEarned: number;
+  featuredBadge: {
+    id: string;
+    slug: string;
+    name: string;
+    icon: string;
+    rarity: "COMMON" | "RARE" | "EPIC" | "LEGENDARY";
+    description: string;
+  } | null;
+  showcaseBadges: Array<{
+    id: string;
+    slug: string;
+    name: string;
+    icon: string;
+    rarity: string;
+  }>;
+  primaryPlace: { id: string; name: string; type: string } | null;
+  primaryGoal: string | null;
+}
+
+export interface ProfileExpandedStats {
+  training: {
+    totalWorkouts: number;
+    weeklyAvg: number;
+    monthlyConsistency: number;
+    totalVolume: number;
+    totalMinutes: number;
+    avgDuration: number;
+    longestWorkout: { duration: number; name: string } | null;
+    topExercise: { name: string; count: number } | null;
+    totalPRs: number;
+  };
+  activity: {
+    totalSteps: number;
+    avgDailySteps: number;
+    totalDistance: number;
+    dailyRecord: number;
+    avgActiveMinutes: number;
+    goalDaysPercent: number;
+  };
+  nutrition: {
+    avgCalories: number;
+    avgProtein: number;
+    avgCarbs: number;
+    avgFat: number;
+    avgWater: number;
+    daysLogged: number;
+  };
+  body: {
+    currentWeight: number | null;
+    initialWeight: number | null;
+    weightChange: number | null;
+    currentBF: number | null;
+    initialBF: number | null;
+    bfChange: number | null;
+    height: number | null;
+    bmi: number | null;
+  };
+  gamification: {
+    level: number;
+    xp: number;
+    currentXP: number;
+    maxXP: number;
+    streak: number;
+    bestStreak: number;
+    badgesEarned: number;
+    badgesTotal: number;
+    totalPosts: number;
+    reactionsReceived: number;
+    challengesCompleted: number;
+    challengesWon: number;
+  };
+  memberSince: string;
+}
+
+export interface ProfileChartData {
+  type: string;
+  data: any;
+}
+
+export interface ProfileHistoryItem {
+  id: string;
+  name: string;
+  date: string;
+  duration: number;
+  totalVolume: number;
+  xpEarned: number;
+  exercises: string[];
+  prsInWorkout: number;
+  setsCount: number;
+}
+
+export interface ProfileHistoryResponse {
+  workouts: ProfileHistoryItem[];
+  total: number;
+  page: number;
+  totalPages: number;
+}
+
+export interface ProfilePostsResponse {
+  posts: SocialPost[];
+  nextCursor: string | null;
+  hasMore: boolean;
+}
+
+export interface ProfileBadgesResponse {
+  badges: Array<{
+    id: string;
+    slug: string;
+    name: string;
+    description: string;
+    icon: string;
+    category: string;
+    rarity: "COMMON" | "RARE" | "EPIC" | "LEGENDARY";
+    xpReward: number;
+    earned: boolean;
+    earnedAt: string | null;
+  }>;
+  earned: number;
+  total: number;
+}
+
+export interface CompareUserStats {
+  name: string;
+  username: string;
+  avatarUrl: string | null;
+  level: number;
+  xp: number;
+  streak: number;
+  totalWorkouts: number;
+  totalVolume: number;
+  monthlyConsistency: number;
+  totalPRs: number;
+  avgDailySteps: number;
+  badgesEarned: number;
+  benchPR: number;
+  squatPR: number;
+  deadliftPR: number;
+}
+
+export interface CompareMetric {
+  key: string;
+  label: string;
+  myValue: number;
+  theirValue: number;
+  winner: "me" | "them" | "tie";
+}
+
+export interface CompareResponse {
+  me: CompareUserStats;
+  them: CompareUserStats;
+  comparison: CompareMetric[];
+  score: { me: number; them: number; ties: number };
+}
+
 // ─── Onboarding Types ────────────────────────────────
 export interface PlaceData {
   id: string;
@@ -741,6 +920,40 @@ export const pushTokenAPI = {
     api.post("/api/push-token", { token, platform }),
   unregister: (token: string) =>
     api.delete("/api/push-token", { data: { token } }),
+};
+
+// ─── Enhanced Profile API ─────────────────────────────
+export const profileAPI = {
+  getCombo: (userId: string) =>
+    api.get<ProfileComboData>(`/api/profile/${userId}/combo`),
+
+  getStats: (userId: string) =>
+    api.get<ProfileExpandedStats>(`/api/profile/${userId}/stats`),
+
+  getChart: (userId: string, type: string, period?: string) =>
+    api.get<ProfileChartData>(`/api/profile/${userId}/charts/${type}${period ? `?period=${period}` : ""}`),
+
+  getPosts: (userId: string, cursor?: string, limit?: number) =>
+    api.get<ProfilePostsResponse>(
+      `/api/profile/${userId}/posts?${cursor ? `cursor=${cursor}&` : ""}${limit ? `limit=${limit}` : ""}`
+    ),
+
+  getHistory: (userId: string, page?: number, limit?: number) =>
+    api.get<ProfileHistoryResponse>(
+      `/api/profile/${userId}/history?page=${page || 1}&limit=${limit || 20}`
+    ),
+
+  getBadges: (userId: string) =>
+    api.get<ProfileBadgesResponse>(`/api/profile/${userId}/badges`),
+
+  getCompare: (userId: string) =>
+    api.get<CompareResponse>(`/api/profile/${userId}/compare`),
+
+  logWeight: (data: { weight: number; bodyFat?: number; note?: string }) =>
+    api.post("/api/profile/weight-log", data),
+
+  updateShowcase: (badgeIds: string[]) =>
+    api.put("/api/profile/showcase", { badgeIds }),
 };
 
 // ─── Steps API ────────────────────────────────────────

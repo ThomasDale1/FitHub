@@ -25,6 +25,7 @@ export default function RootLayout() {
           <Stack.Screen name="(onboarding)" />
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="badges" />
+          <Stack.Screen name="profile" />
         </Stack>
       </ClerkLoaded>
     </ClerkProvider>

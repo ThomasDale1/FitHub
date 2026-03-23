@@ -19,6 +19,7 @@ import stepsRouter from './routes/steps.js'
 import pushTokensRouter from './routes/pushTokens.js'
 import onboardingRouter from './routes/onboarding.js'
 import placesRouter from './routes/places.js'
+import profileRouter from './routes/profile.js'
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -83,7 +84,8 @@ app.use("/api/badges", badgesRouter);
 app.use("/api/steps", stepsRouter)
 app.use("/api/push-token", pushTokensRouter)
 app.use("/api/onboarding", onboardingRouter)
-app.use("/api/places", placesRouter)       
+app.use("/api/places", placesRouter)
+app.use("/api/profile", profileRouter)       
 
 // ─── INICIAR SERVIDOR ─────────────────────────────────
 app.listen(PORT, () => {

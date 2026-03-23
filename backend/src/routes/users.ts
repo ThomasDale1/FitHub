@@ -7,6 +7,7 @@ import { prisma } from "../lib/prisma.js"
 import { requireAuth } from "../middleware/auth.js"
 import { getAuth } from "@clerk/express"
 import { isValidCloudinaryUrl, deleteCloudinaryResource } from "../lib/cloudinary.js"
+import { calculateLevel, calculateStreak, updateBestStreak } from "../lib/userHelpers.js"
 
 const router = Router()
 router.use(requireAuth)
@@ -28,75 +29,6 @@ async function getUserByClerkId(clerkId: string) {
   })
 }
 
-// ─── XP → Level calculation ──────────────────────────
-// Cada nivel necesita más XP que el anterior
-// Level 1: 0-499, Level 2: 500-1199, Level 3: 1200-2099...
-function calculateLevel(xp: number): { level: number; currentXP: number; maxXP: number } {
-  let level = 1
-  let xpForNextLevel = 500
-  let totalXpUsed = 0
-
-  while (xp >= totalXpUsed + xpForNextLevel) {
-    totalXpUsed += xpForNextLevel
-    level++
-    xpForNextLevel = Math.floor(xpForNextLevel * 1.4) // cada nivel es 40% más difícil
-  }
-
-  return {
-    level,
-    currentXP: xp - totalXpUsed,
-    maxXP: xpForNextLevel,
-  }
-}
-
-// ─── Streak calculation ──────────────────────────────
-// Calcula el streak real basado en workouts completados
-async function calculateStreak(userId: string): Promise<number> {
-  const workouts = await prisma.workout.findMany({
-    where: { userId, isCompleted: true },
-    select: { startTime: true },
-    orderBy: { startTime: "desc" },
-    take: 90, // últimos 90 workouts máximo
-  })
-
-  if (workouts.length === 0) return 0
-
-  // Agrupar por fecha (solo date, sin hora)
-  const workoutDates = new Set(
-    workouts.map((w) => w.startTime.toISOString().split("T")[0])
-  )
-
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-
-  let streak = 0
-  const checkDate = new Date(today)
-
-  // Verificar si hoy o ayer tiene workout (para dar gracia de 1 día)
-  const todayStr = checkDate.toISOString().split("T")[0]
-  checkDate.setDate(checkDate.getDate() - 1)
-  const yesterdayStr = checkDate.toISOString().split("T")[0]
-
-  if (!workoutDates.has(todayStr) && !workoutDates.has(yesterdayStr)) {
-    return 0
-  }
-
-  // Si hoy no tiene workout, empezar desde ayer
-  if (!workoutDates.has(todayStr)) {
-    checkDate.setDate(checkDate.getDate()) // ya está en ayer
-  } else {
-    checkDate.setTime(today.getTime()) // empezar desde hoy
-  }
-
-  // Contar días consecutivos
-  while (workoutDates.has(checkDate.toISOString().split("T")[0])) {
-    streak++
-    checkDate.setDate(checkDate.getDate() - 1)
-  }
-
-  return streak
-}
-
 // ═══════════════════════════════════════════════════════
 // GET /api/users/me — Perfil del usuario
 // ═══════════════════════════════════════════════════════
@@ -112,6 +44,7 @@ router.get("/me", async (req: Request, res: Response) => {
 
     const levelInfo = calculateLevel(user.xp)
     const streak = await calculateStreak(user.id)
+    updateBestStreak(user.id, streak).catch(() => {})
 
     res.json({
       ...user,
@@ -119,6 +52,7 @@ router.get("/me", async (req: Request, res: Response) => {
       currentXP: levelInfo.currentXP,
       maxXP: levelInfo.maxXP,
       streak,
+      bestStreak: Math.max(user.bestStreak, streak),
       featuredBadge: user.featuredBadge || null,
       onboardingCompleted: user.onboardingCompleted,
       onboardingStep: user.onboardingStep,

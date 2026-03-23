@@ -28,8 +28,11 @@ model User {
   xp              Int       @default(0)
   level           Int       @default(1)
   streak          Int       @default(0)
+  bestStreak      Int       @default(0)
   lastWorkout     DateTime?
   featuredBadgeId String?
+  initialWeight   Float?
+  initialBodyFat  Float?
 
   // Onboarding
   dateOfBirth         DateTime?
@@ -74,6 +77,10 @@ model User {
   hobbies                  UserHobby[]
   places                   UserPlace[]
   createdPlaces            Place[]                  @relation("PlaceCreator")
+
+  // Enhanced Profile
+  weightLogs               WeightLog[]
+  showcase                 ProfileShowcase?
 
   @@map("users")
 }
@@ -763,4 +770,32 @@ model UserPlace {
 
   @@unique([userId, placeId])
   @@map("user_places")
+}
+
+// ─── WEIGHT LOG (historial de peso) ─────────────────
+model WeightLog {
+  id        String   @id @default(cuid())
+  userId    String
+  weight    Float
+  bodyFat   Float?
+  note      String?
+  loggedAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, loggedAt])
+  @@map("weight_logs")
+}
+
+// ─── PROFILE SHOWCASE (badges destacados) ───────────
+model ProfileShowcase {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  badgeIds  String[] // IDs de badges a mostrar (max 4)
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  updatedAt DateTime @updatedAt
+
+  @@map("profile_showcases")
 }
