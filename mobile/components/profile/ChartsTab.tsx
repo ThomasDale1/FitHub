@@ -59,6 +59,7 @@ function ChartSection({ title, icon, color, children }: {
 // ─── Individual Chart Components ─────────────────────
 
 function HeatmapChart({ data }: { data: Record<string, { count: number; volume: number; duration: number }> }) {
+  if (!data || typeof data !== "object") return <Text className="text-text-muted text-xs text-center py-4">Sin datos</Text>
   const entries = Object.entries(data).sort(([a], [b]) => a.localeCompare(b))
   if (entries.length === 0) return <Text className="text-text-muted text-xs text-center py-4">Sin datos</Text>
 
@@ -144,6 +145,7 @@ function VolumeChart({ data }: { data: Array<{ value: number; label: string }> }
 }
 
 function StrengthChart({ data }: { data: Record<string, Array<{ value: number; date: string }>> }) {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return <Text className="text-text-muted text-xs text-center py-4">Sin PRs registrados</Text>
   const exercises = Object.keys(data)
   if (exercises.length === 0) return <Text className="text-text-muted text-xs text-center py-4">Sin PRs registrados</Text>
 
@@ -354,7 +356,7 @@ function XPChart({ data }: { data: Array<{ value: number; label: string }> }) {
 }
 
 function MacrosChart({ data }: { data: { protein: { grams: number; percent: number }; carbs: { grams: number; percent: number }; fat: { grams: number; percent: number }; avgCalories: number } }) {
-  if (!data) return <Text className="text-text-muted text-xs text-center py-4">Sin datos</Text>
+  if (!data || !data.protein || !data.carbs || !data.fat) return <Text className="text-text-muted text-xs text-center py-4">Sin datos</Text>
 
   const pieData = [
     { value: data.protein.percent, color: "#EF4444", text: `${data.protein.percent}%` },
@@ -445,17 +447,18 @@ export default function ChartsTab({ userId }: ChartsTabProps) {
 
   const renderChart = () => {
     if (loading) return <ActivityIndicator color="#6C63FF" size="large" className="py-8" />
-    if (!chartData?.data) return <Text className="text-text-muted text-xs text-center py-4">Sin datos disponibles</Text>
+    const d = chartData?.data
+    if (!d) return <Text className="text-text-muted text-xs text-center py-4">Sin datos disponibles</Text>
 
     switch (activeChart) {
-      case "heatmap": return <HeatmapChart data={chartData.data} />
-      case "volume": return <VolumeChart data={chartData.data} />
-      case "strength": return <StrengthChart data={chartData.data} />
-      case "muscle": return <MuscleChart data={chartData.data} />
-      case "steps": return <StepsChart data={chartData.data} />
-      case "weight": return <WeightChart data={chartData.data} />
-      case "xp": return <XPChart data={chartData.data} />
-      case "macros": return <MacrosChart data={chartData.data} />
+      case "heatmap": return <HeatmapChart data={d} />
+      case "volume": return <VolumeChart data={Array.isArray(d) ? d : []} />
+      case "strength": return <StrengthChart data={d} />
+      case "muscle": return <MuscleChart data={Array.isArray(d) ? d : []} />
+      case "steps": return <StepsChart data={Array.isArray(d) ? d : []} />
+      case "weight": return <WeightChart data={Array.isArray(d) ? d : []} />
+      case "xp": return <XPChart data={Array.isArray(d) ? d : []} />
+      case "macros": return <MacrosChart data={d} />
       default: return null
     }
   }
