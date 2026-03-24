@@ -20,6 +20,13 @@ const RARITY_COLORS: Record<string, { border: string; text: string }> = {
   LEGENDARY: { border: "#F59E0B", text: "#FBBF24" },
 }
 
+const AVATAR_GLOW: Record<string, { borderColor: string; borderWidth: number; shadowColor: string; shadowRadius: number; shadowOpacity: number }> = {
+  COMMON:    { borderColor: "#A0A0A0", borderWidth: 2, shadowColor: "#A0A0A0", shadowRadius: 0, shadowOpacity: 0 },
+  RARE:      { borderColor: "#3B82F6", borderWidth: 3, shadowColor: "#3B82F6", shadowRadius: 8, shadowOpacity: 0.4 },
+  EPIC:      { borderColor: "#8B5CF6", borderWidth: 3, shadowColor: "#8B5CF6", shadowRadius: 12, shadowOpacity: 0.5 },
+  LEGENDARY: { borderColor: "#F59E0B", borderWidth: 4, shadowColor: "#F59E0B", shadowRadius: 18, shadowOpacity: 0.7 },
+}
+
 interface ProfileHeaderProps {
   data: ProfileComboData
   onEditPress?: () => void
@@ -56,6 +63,7 @@ export default function ProfileHeader({ data, onEditPress, onAvatarPress, upload
 
   const avatarUrl = data.avatarUrl
   const rarity = data.featuredBadge ? RARITY_COLORS[data.featuredBadge.rarity] || RARITY_COLORS.COMMON : null
+  const glow = data.featuredBadge ? AVATAR_GLOW[data.featuredBadge.rarity] || AVATAR_GLOW.COMMON : AVATAR_GLOW.COMMON
 
   return (
     <View>
@@ -66,16 +74,24 @@ export default function ProfileHeader({ data, onEditPress, onAvatarPress, upload
           disabled={!data.isOwnProfile || uploadingAvatar}
           activeOpacity={0.7}
         >
-          <View>
+          <View
+            style={{
+              shadowColor: glow.shadowColor,
+              shadowOffset: { width: 0, height: 0 },
+              shadowOpacity: glow.shadowOpacity,
+              shadowRadius: glow.shadowRadius,
+              elevation: glow.shadowRadius > 0 ? glow.shadowRadius : 0,
+            }}
+          >
             {avatarUrl ? (
               <Image
                 source={{ uri: avatarUrl.startsWith("https://res.cloudinary.com/") ? transforms.avatarLarge(avatarUrl) : avatarUrl }}
-                style={{ width: 100, height: 100, borderRadius: 50, borderWidth: 3, borderColor: "#6C63FF" }}
+                style={{ width: 100, height: 100, borderRadius: 50, borderWidth: glow.borderWidth, borderColor: glow.borderColor }}
               />
             ) : (
               <View
                 className="bg-primary/20 items-center justify-center"
-                style={{ width: 100, height: 100, borderRadius: 50, borderWidth: 3, borderColor: "#6C63FF" }}
+                style={{ width: 100, height: 100, borderRadius: 50, borderWidth: glow.borderWidth, borderColor: glow.borderColor }}
               >
                 <Text className="text-primary text-3xl font-bold">
                   {(data.name || "A").charAt(0).toUpperCase()}
