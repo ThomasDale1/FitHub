@@ -22,6 +22,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { useState, useCallback, useEffect } from "react";
 import { useUser } from "@clerk/clerk-expo";
+import { router } from "expo-router";
 import {
   socialAPI,
   badgesAPI,
@@ -83,7 +84,11 @@ function PostCard({
   return (
     <View className="bg-background-card border border-background-elevated rounded-3xl p-4 mb-3">
       {/* Header */}
-      <View className="flex-row items-center gap-x-3 mb-3">
+      <TouchableOpacity
+        className="flex-row items-center gap-x-3 mb-3"
+        onPress={() => router.push(`/profile/${post.user.id}` as any)}
+        activeOpacity={0.7}
+      >
         {post.user.avatarUrl ? (
           <Image
             source={{
@@ -116,7 +121,7 @@ function PostCard({
             @{post.user.username} · {timeAgo(post.createdAt)}
           </Text>
         </View>
-      </View>
+      </TouchableOpacity>
 
       {/* Post type badge */}
       {typeInfo && (
@@ -1093,9 +1098,11 @@ export default function SocialScreen() {
               </View>
             ) : (
               suggestions.map((user) => (
-                <View
+                <TouchableOpacity
                   key={user.id}
                   className="bg-background-card border border-background-elevated rounded-3xl p-4 mb-3 flex-row items-center gap-x-3"
+                  onPress={() => router.push(`/profile/${user.id}` as any)}
+                  activeOpacity={0.7}
                 >
                   {user.avatarUrl ? (
                     <Image
@@ -1132,7 +1139,7 @@ export default function SocialScreen() {
                   >
                     <Text className="text-white text-xs font-bold">Seguir</Text>
                   </TouchableOpacity>
-                </View>
+                </TouchableOpacity>
               ))
             )}
           </>

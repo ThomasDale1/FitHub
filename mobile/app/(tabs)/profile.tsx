@@ -19,7 +19,7 @@ import { Ionicons } from "@expo/vector-icons"
 import { useState, useCallback } from "react"
 import { router } from "expo-router"
 import { useProfile } from "@/hooks/useUserData"
-import { useProfileCombo, useProfileStats, useProfilePosts, useProfileHistory, useProfileBadges } from "@/hooks/useProfile"
+import { useProfileCombo, useProfileStats, useProfilePosts, useProfileHistory, useProfileBadges, useNutritionHistory, useStepsHistory } from "@/hooks/useProfile"
 import { badgesAPI, userAPI } from "@/lib/api"
 import { pickAvatar } from "@/lib/mediaPicker"
 import { uploadToCloudinary } from "@/lib/cloudinary"
@@ -29,6 +29,7 @@ import ProfileTabBar, { type ProfileTab } from "@/components/profile/ProfileTabB
 import PostsTab from "@/components/profile/PostsTab"
 import StatsTab from "@/components/profile/StatsTab"
 import HistoryTab from "@/components/profile/HistoryTab"
+import ChartsTab from "@/components/profile/ChartsTab"
 import BadgesTab from "@/components/profile/BadgesTab"
 import EditProfileSection from "@/components/profile/EditProfileSection"
 
@@ -47,6 +48,8 @@ export default function ProfileScreen() {
   const { data: stats, loading: statsLoading, refetch: refetchStats } = useProfileStats(userId)
   const { posts, loading: postsLoading, loadingMore: postsLoadingMore, hasMore: postsHasMore, refetch: refetchPosts, fetchMore: fetchMorePosts } = useProfilePosts(userId)
   const { workouts, loading: historyLoading, loadingMore: historyLoadingMore, total: historyTotal, hasMore: historyHasMore, refetch: refetchHistory, fetchMore: fetchMoreHistory } = useProfileHistory(userId)
+  const { logs: nutritionLogs, loading: nutritionLoading, loadingMore: nutritionLoadingMore, total: nutritionTotal, hasMore: nutritionHasMore, refetch: refetchNutrition, fetchMore: fetchMoreNutrition } = useNutritionHistory(userId)
+  const { days: stepsDays, loading: stepsLoading, loadingMore: stepsLoadingMore, total: stepsTotal, hasMore: stepsHasMore, refetch: refetchSteps, fetchMore: fetchMoreSteps } = useStepsHistory(userId)
   const { data: badgesData, loading: badgesLoading, refetch: refetchBadges } = useProfileBadges(userId)
 
   const [activeTab, setActiveTab] = useState<ProfileTab>("posts")
@@ -62,11 +65,13 @@ export default function ProfileScreen() {
       refetchStats(),
       refetchPosts(),
       refetchHistory(),
+      refetchNutrition(),
+      refetchSteps(),
       refetchBadges(),
       badgesAPI.check().catch(() => {}),
     ])
     setRefreshing(false)
-  }, [refetchOldProfile, refetchCombo, refetchStats, refetchPosts, refetchHistory, refetchBadges])
+  }, [refetchOldProfile, refetchCombo, refetchStats, refetchPosts, refetchHistory, refetchNutrition, refetchSteps, refetchBadges])
 
   const handleChangeAvatar = async () => {
     const image = await pickAvatar()
@@ -202,14 +207,30 @@ export default function ProfileScreen() {
               <StatsTab data={stats} loading={statsLoading} />
             )}
 
+            {activeTab === "charts" && userId && (
+              <ChartsTab userId={userId} />
+            )}
+
             {activeTab === "history" && (
               <HistoryTab
                 workouts={workouts}
-                loading={historyLoading}
-                loadingMore={historyLoadingMore}
-                total={historyTotal}
-                hasMore={historyHasMore}
-                onLoadMore={fetchMoreHistory}
+                workoutsLoading={historyLoading}
+                workoutsLoadingMore={historyLoadingMore}
+                workoutsTotal={historyTotal}
+                workoutsHasMore={historyHasMore}
+                onLoadMoreWorkouts={fetchMoreHistory}
+                nutritionLogs={nutritionLogs}
+                nutritionLoading={nutritionLoading}
+                nutritionLoadingMore={nutritionLoadingMore}
+                nutritionTotal={nutritionTotal}
+                nutritionHasMore={nutritionHasMore}
+                onLoadMoreNutrition={fetchMoreNutrition}
+                stepsDays={stepsDays}
+                stepsLoading={stepsLoading}
+                stepsLoadingMore={stepsLoadingMore}
+                stepsTotal={stepsTotal}
+                stepsHasMore={stepsHasMore}
+                onLoadMoreSteps={fetchMoreSteps}
               />
             )}
 

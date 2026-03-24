@@ -11,6 +11,7 @@ import { useState } from "react"
 import { type ProfileComboData, socialAPI } from "@/lib/api"
 import { transforms } from "@/lib/cloudinary"
 import XPBar from "@/components/XPBar"
+import ShowcaseSelector from "@/components/profile/ShowcaseSelector"
 
 const RARITY_COLORS: Record<string, { border: string; text: string }> = {
   COMMON: { border: "#6B7280", text: "#9CA3AF" },
@@ -31,6 +32,8 @@ export default function ProfileHeader({ data, onEditPress, onAvatarPress, upload
   const [followLoading, setFollowLoading] = useState(false)
   const [isFollowing, setIsFollowing] = useState(data.isFollowing)
   const [followersCount, setFollowersCount] = useState(data.followersCount)
+  const [showcaseVisible, setShowcaseVisible] = useState(false)
+  const [showcaseBadges, setShowcaseBadges] = useState(data.showcaseBadges)
 
   const handleFollow = async () => {
     setFollowLoading(true)
@@ -174,9 +177,14 @@ export default function ProfileHeader({ data, onEditPress, onAvatarPress, upload
       )}
 
       {/* Showcase badges */}
-      {data.showcaseBadges.length > 0 && (
-        <View className="flex-row justify-center gap-x-3 mb-4">
-          {data.showcaseBadges.map(b => {
+      {showcaseBadges.length > 0 ? (
+        <TouchableOpacity
+          className="flex-row justify-center gap-x-3 mb-4"
+          onPress={data.isOwnProfile ? () => setShowcaseVisible(true) : undefined}
+          disabled={!data.isOwnProfile}
+          activeOpacity={data.isOwnProfile ? 0.7 : 1}
+        >
+          {showcaseBadges.map(b => {
             const r = RARITY_COLORS[b.rarity] || RARITY_COLORS.COMMON
             return (
               <View
@@ -189,7 +197,32 @@ export default function ProfileHeader({ data, onEditPress, onAvatarPress, upload
               </View>
             )
           })}
-        </View>
+          {data.isOwnProfile && (
+            <View className="items-center justify-center px-2">
+              <Ionicons name="pencil-outline" size={14} color="#6B6B80" />
+            </View>
+          )}
+        </TouchableOpacity>
+      ) : data.isOwnProfile ? (
+        <TouchableOpacity
+          className="flex-row items-center justify-center gap-x-2 mb-4 py-3 rounded-2xl border border-dashed border-background-elevated"
+          onPress={() => setShowcaseVisible(true)}
+        >
+          <Ionicons name="add-circle-outline" size={18} color="#6C63FF" />
+          <Text className="text-primary text-sm font-semibold">Agregar Showcase Badges</Text>
+        </TouchableOpacity>
+      ) : null}
+
+      {/* Showcase selector modal */}
+      {data.isOwnProfile && (
+        <ShowcaseSelector
+          visible={showcaseVisible}
+          currentBadgeIds={showcaseBadges.map(b => b.id)}
+          onClose={() => setShowcaseVisible(false)}
+          onSave={() => {
+            onRefresh?.()
+          }}
+        />
       )}
 
       {/* Level & XP */}

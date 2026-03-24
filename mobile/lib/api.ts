@@ -734,6 +734,19 @@ export interface ProfileExpandedStats {
     avgWater: number;
     daysLogged: number;
   };
+  strength: {
+    benchPR: number;
+    benchDate: string | null;
+    squatPR: number;
+    squatDate: string | null;
+    deadliftPR: number;
+    deadliftDate: string | null;
+    ohpPR: number;
+    ohpDate: string | null;
+    rowPR: number;
+    rowDate: string | null;
+    estimatedTotal: number;
+  };
   body: {
     currentWeight: number | null;
     initialWeight: number | null;
@@ -743,6 +756,7 @@ export interface ProfileExpandedStats {
     bfChange: number | null;
     height: number | null;
     bmi: number | null;
+    recentWeightLogs: Array<{ weight: number; bodyFat: number | null; date: string }>;
   };
   gamification: {
     level: number;
@@ -806,6 +820,46 @@ export interface ProfileBadgesResponse {
   }>;
   earned: number;
   total: number;
+}
+
+export interface NutritionHistoryItem {
+  id: string;
+  date: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  fiber: number;
+  water: number;
+  calorieGoal: number;
+  caloriePercent: number;
+}
+
+export interface NutritionHistoryResponse {
+  logs: NutritionHistoryItem[];
+  total: number;
+  page: number;
+  totalPages: number;
+}
+
+export interface StepsHistoryItem {
+  id: string;
+  date: string;
+  steps: number;
+  goal: number;
+  goalReached: boolean;
+  calories: number;
+  distance: number;
+  activeMinutes: number;
+  floors: number;
+  goalPercent: number;
+}
+
+export interface StepsHistoryResponse {
+  days: StepsHistoryItem[];
+  total: number;
+  page: number;
+  totalPages: number;
 }
 
 export interface CompareUserStats {
@@ -948,6 +1002,16 @@ export const profileAPI = {
 
   getCompare: (userId: string) =>
     api.get<CompareResponse>(`/api/profile/${userId}/compare`),
+
+  getNutritionHistory: (userId: string, page?: number, limit?: number) =>
+    api.get<NutritionHistoryResponse>(
+      `/api/profile/${userId}/nutrition-history?page=${page || 1}&limit=${limit || 20}`
+    ),
+
+  getStepsHistory: (userId: string, page?: number, limit?: number) =>
+    api.get<StepsHistoryResponse>(
+      `/api/profile/${userId}/steps-history?page=${page || 1}&limit=${limit || 20}`
+    ),
 
   logWeight: (data: { weight: number; bodyFat?: number; note?: string }) =>
     api.post("/api/profile/weight-log", data),

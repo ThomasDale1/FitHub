@@ -20,12 +20,15 @@ import {
   useProfilePosts,
   useProfileHistory,
   useProfileBadges,
+  useNutritionHistory,
+  useStepsHistory,
 } from "@/hooks/useProfile"
 
 import ProfileHeader from "@/components/profile/ProfileHeader"
 import ProfileTabBar, { type ProfileTab } from "@/components/profile/ProfileTabBar"
 import PostsTab from "@/components/profile/PostsTab"
 import StatsTab from "@/components/profile/StatsTab"
+import ChartsTab from "@/components/profile/ChartsTab"
 import HistoryTab from "@/components/profile/HistoryTab"
 import BadgesTab from "@/components/profile/BadgesTab"
 
@@ -36,6 +39,8 @@ export default function PublicProfileScreen() {
   const { data: stats, loading: statsLoading, refetch: refetchStats } = useProfileStats(userId)
   const { posts, loading: postsLoading, loadingMore: postsLoadingMore, hasMore: postsHasMore, refetch: refetchPosts, fetchMore: fetchMorePosts } = useProfilePosts(userId)
   const { workouts, loading: historyLoading, loadingMore: historyLoadingMore, total: historyTotal, hasMore: historyHasMore, refetch: refetchHistory, fetchMore: fetchMoreHistory } = useProfileHistory(userId)
+  const { logs: nutritionLogs, loading: nutritionLoading, loadingMore: nutritionLoadingMore, total: nutritionTotal, hasMore: nutritionHasMore, refetch: refetchNutrition, fetchMore: fetchMoreNutrition } = useNutritionHistory(userId)
+  const { days: stepsDays, loading: stepsLoading, loadingMore: stepsLoadingMore, total: stepsTotal, hasMore: stepsHasMore, refetch: refetchSteps, fetchMore: fetchMoreSteps } = useStepsHistory(userId)
   const { data: badgesData, loading: badgesLoading, refetch: refetchBadges } = useProfileBadges(userId)
 
   const [activeTab, setActiveTab] = useState<ProfileTab>("posts")
@@ -44,10 +49,10 @@ export default function PublicProfileScreen() {
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
     await Promise.all([
-      refetchCombo(), refetchStats(), refetchPosts(), refetchHistory(), refetchBadges(),
+      refetchCombo(), refetchStats(), refetchPosts(), refetchHistory(), refetchNutrition(), refetchSteps(), refetchBadges(),
     ])
     setRefreshing(false)
-  }, [refetchCombo, refetchStats, refetchPosts, refetchHistory, refetchBadges])
+  }, [refetchCombo, refetchStats, refetchPosts, refetchHistory, refetchNutrition, refetchSteps, refetchBadges])
 
   if (comboLoading && !combo) {
     return (
@@ -98,14 +103,30 @@ export default function PublicProfileScreen() {
             <StatsTab data={stats} loading={statsLoading} />
           )}
 
+          {activeTab === "charts" && userId && (
+            <ChartsTab userId={userId} />
+          )}
+
           {activeTab === "history" && (
             <HistoryTab
               workouts={workouts}
-              loading={historyLoading}
-              loadingMore={historyLoadingMore}
-              total={historyTotal}
-              hasMore={historyHasMore}
-              onLoadMore={fetchMoreHistory}
+              workoutsLoading={historyLoading}
+              workoutsLoadingMore={historyLoadingMore}
+              workoutsTotal={historyTotal}
+              workoutsHasMore={historyHasMore}
+              onLoadMoreWorkouts={fetchMoreHistory}
+              nutritionLogs={nutritionLogs}
+              nutritionLoading={nutritionLoading}
+              nutritionLoadingMore={nutritionLoadingMore}
+              nutritionTotal={nutritionTotal}
+              nutritionHasMore={nutritionHasMore}
+              onLoadMoreNutrition={fetchMoreNutrition}
+              stepsDays={stepsDays}
+              stepsLoading={stepsLoading}
+              stepsLoadingMore={stepsLoadingMore}
+              stepsTotal={stepsTotal}
+              stepsHasMore={stepsHasMore}
+              onLoadMoreSteps={fetchMoreSteps}
             />
           )}
 

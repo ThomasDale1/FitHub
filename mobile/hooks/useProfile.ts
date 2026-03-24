@@ -13,6 +13,8 @@ import {
   type ProfileBadgesResponse,
   type CompareResponse,
   type SocialPost,
+  type NutritionHistoryItem,
+  type StepsHistoryItem,
 } from "@/lib/api"
 
 // ─── Hook: Profile Combo ─────────────────────────────
@@ -220,4 +222,94 @@ export function useProfileCompare(userId: string | null) {
   useEffect(() => { fetch() }, [fetch])
 
   return { data, loading, error, refetch: fetch }
+}
+
+// ─── Hook: Nutrition History ─────────────────────────
+export function useNutritionHistory(userId: string | null) {
+  const [logs, setLogs] = useState<NutritionHistoryItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [page, setPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [total, setTotal] = useState(0)
+
+  const fetch = useCallback(async () => {
+    if (!userId) return
+    try {
+      setLoading(true)
+      const res = await profileAPI.getNutritionHistory(userId, 1)
+      setLogs(res.data.logs)
+      setPage(1)
+      setTotalPages(res.data.totalPages)
+      setTotal(res.data.total)
+    } catch (err) {
+      console.error("Nutrition history error:", err)
+    } finally {
+      setLoading(false)
+    }
+  }, [userId])
+
+  const fetchMore = useCallback(async () => {
+    if (!userId || loadingMore || page >= totalPages) return
+    try {
+      setLoadingMore(true)
+      const nextPage = page + 1
+      const res = await profileAPI.getNutritionHistory(userId, nextPage)
+      setLogs(prev => [...prev, ...res.data.logs])
+      setPage(nextPage)
+    } catch (err) {
+      console.error("Nutrition history load more:", err)
+    } finally {
+      setLoadingMore(false)
+    }
+  }, [userId, loadingMore, page, totalPages])
+
+  useEffect(() => { fetch() }, [fetch])
+
+  return { logs, loading, loadingMore, total, hasMore: page < totalPages, refetch: fetch, fetchMore }
+}
+
+// ─── Hook: Steps History ─────────────────────────────
+export function useStepsHistory(userId: string | null) {
+  const [days, setDays] = useState<StepsHistoryItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [page, setPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [total, setTotal] = useState(0)
+
+  const fetch = useCallback(async () => {
+    if (!userId) return
+    try {
+      setLoading(true)
+      const res = await profileAPI.getStepsHistory(userId, 1)
+      setDays(res.data.days)
+      setPage(1)
+      setTotalPages(res.data.totalPages)
+      setTotal(res.data.total)
+    } catch (err) {
+      console.error("Steps history error:", err)
+    } finally {
+      setLoading(false)
+    }
+  }, [userId])
+
+  const fetchMore = useCallback(async () => {
+    if (!userId || loadingMore || page >= totalPages) return
+    try {
+      setLoadingMore(true)
+      const nextPage = page + 1
+      const res = await profileAPI.getStepsHistory(userId, nextPage)
+      setDays(prev => [...prev, ...res.data.days])
+      setPage(nextPage)
+    } catch (err) {
+      console.error("Steps history load more:", err)
+    } finally {
+      setLoadingMore(false)
+    }
+  }, [userId, loadingMore, page, totalPages])
+
+  useEffect(() => { fetch() }, [fetch])
+
+  return { days, loading, loadingMore, total, hasMore: page < totalPages, refetch: fetch, fetchMore }
 }

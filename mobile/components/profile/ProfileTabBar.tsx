@@ -2,14 +2,15 @@
 // mobile/components/profile/ProfileTabBar.tsx
 // Horizontal tab bar for profile sections
 // ─────────────────────────────────────────────────────
-import { View, Text, TouchableOpacity, ScrollView } from "react-native"
+import { View, Text, TouchableOpacity } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 
-export type ProfileTab = "posts" | "stats" | "history" | "badges"
+export type ProfileTab = "posts" | "stats" | "charts" | "history" | "badges"
 
 const TABS: { key: ProfileTab; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
   { key: "posts", label: "Posts", icon: "grid-outline" },
   { key: "stats", label: "Stats", icon: "stats-chart-outline" },
+  { key: "charts", label: "Gráficas", icon: "analytics-outline" },
   { key: "history", label: "Historial", icon: "time-outline" },
   { key: "badges", label: "Badges", icon: "trophy-outline" },
 ]

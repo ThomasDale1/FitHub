@@ -193,6 +193,26 @@ router.get("/:userId/stats", async (req: Request, res: Response) => {
     const stepGoalDaysCount = Number(stepGoalDays[0]?.count || 0)
     const totalStepDays = await prisma.dailySteps.count({ where: { userId: targetId } }) || 1
 
+    // Strength PRs (big 3 + overhead press + row)
+    const [benchPR, squatPR, deadliftPR, ohpPR, rowPR] = await Promise.all([
+      prisma.personalRecord.findFirst({ where: { userId: targetId, exerciseName: { contains: "bench press", mode: "insensitive" } }, orderBy: { weight: "desc" }, select: { weight: true, achievedAt: true } }),
+      prisma.personalRecord.findFirst({ where: { userId: targetId, exerciseName: { contains: "squat", mode: "insensitive" } }, orderBy: { weight: "desc" }, select: { weight: true, achievedAt: true } }),
+      prisma.personalRecord.findFirst({ where: { userId: targetId, exerciseName: { contains: "deadlift", mode: "insensitive" } }, orderBy: { weight: "desc" }, select: { weight: true, achievedAt: true } }),
+      prisma.personalRecord.findFirst({ where: { userId: targetId, exerciseName: { contains: "overhead press", mode: "insensitive" } }, orderBy: { weight: "desc" }, select: { weight: true, achievedAt: true } }),
+      prisma.personalRecord.findFirst({ where: { userId: targetId, exerciseName: { contains: "row", mode: "insensitive" } }, orderBy: { weight: "desc" }, select: { weight: true, achievedAt: true } }),
+    ])
+
+    // Estimated 1RM total (bench + squat + deadlift)
+    const estimatedTotal = (benchPR?.weight || 0) + (squatPR?.weight || 0) + (deadliftPR?.weight || 0)
+
+    // Weight log history for body progress
+    const weightLogs = await prisma.weightLog.findMany({
+      where: { userId: targetId },
+      select: { weight: true, bodyFat: true, loggedAt: true },
+      orderBy: { loggedAt: "desc" },
+      take: 5,
+    })
+
     res.json({
       training: {
         totalWorkouts,
@@ -223,6 +243,19 @@ router.get("/:userId/stats", async (req: Request, res: Response) => {
         avgWater: Math.round(nutritionAgg._avg?.waterMl || 0),
         daysLogged: foodLogCount,
       },
+      strength: {
+        benchPR: benchPR?.weight || 0,
+        benchDate: benchPR?.achievedAt || null,
+        squatPR: squatPR?.weight || 0,
+        squatDate: squatPR?.achievedAt || null,
+        deadliftPR: deadliftPR?.weight || 0,
+        deadliftDate: deadliftPR?.achievedAt || null,
+        ohpPR: ohpPR?.weight || 0,
+        ohpDate: ohpPR?.achievedAt || null,
+        rowPR: rowPR?.weight || 0,
+        rowDate: rowPR?.achievedAt || null,
+        estimatedTotal,
+      },
       body: {
         currentWeight: user.weight,
         initialWeight: user.initialWeight,
@@ -232,6 +265,7 @@ router.get("/:userId/stats", async (req: Request, res: Response) => {
         bfChange: user.bodyFat && user.initialBodyFat ? Math.round((user.bodyFat - user.initialBodyFat) * 10) / 10 : null,
         height: user.height,
         bmi: user.weight && user.height ? Math.round((user.weight / ((user.height / 100) ** 2)) * 10) / 10 : null,
+        recentWeightLogs: weightLogs.map(l => ({ weight: l.weight, bodyFat: l.bodyFat, date: l.loggedAt })),
       },
       gamification: {
         level: levelInfo.level,
@@ -265,7 +299,7 @@ router.get("/:userId/charts/:type", async (req: Request, res: Response) => {
     const type = req.params.type as string
     const period = (req.query.period as string) || "3m"
 
-    const monthsMap: Record<string, number> = { "3m": 3, "6m": 6, "1y": 12 }
+    const monthsMap: Record<string, number> = { "1m": 1, "3m": 3, "6m": 6, "1y": 12, "all": 120 }
     const months = monthsMap[period] || 3
     const since = new Date()
     since.setMonth(since.getMonth() - months)
@@ -495,6 +529,93 @@ router.get("/:userId/history", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Profile history error:", error)
     res.status(500).json({ error: "Error al obtener historial" })
+  }
+})
+
+// ═══════════════════════════════════════════════════════
+// GET /api/profile/:userId/nutrition-history?page=1&limit=20
+// ═══════════════════════════════════════════════════════
+router.get("/:userId/nutrition-history", async (req: Request, res: Response) => {
+  try {
+    const userId = req.params.userId as string
+    const page = Math.max(1, parseInt(req.query.page as string) || 1)
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 50)
+
+    const [logs, total] = await Promise.all([
+      prisma.foodLog.findMany({
+        where: { userId },
+        select: {
+          id: true, date: true, totalCalories: true, totalProtein: true,
+          totalCarbs: true, totalFat: true, totalFiber: true, waterMl: true,
+          calorieGoal: true, proteinGoal: true, carbsGoal: true, fatGoal: true,
+        },
+        orderBy: { date: "desc" },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.foodLog.count({ where: { userId } }),
+    ])
+
+    const items = logs.map(l => ({
+      id: l.id,
+      date: l.date,
+      calories: l.totalCalories,
+      protein: l.totalProtein,
+      carbs: l.totalCarbs,
+      fat: l.totalFat,
+      fiber: l.totalFiber,
+      water: l.waterMl,
+      calorieGoal: l.calorieGoal,
+      caloriePercent: l.calorieGoal > 0 ? Math.round((l.totalCalories / l.calorieGoal) * 100) : 0,
+    }))
+
+    res.json({ logs: items, total, page, totalPages: Math.ceil(total / limit) })
+  } catch (error) {
+    console.error("Nutrition history error:", error)
+    res.status(500).json({ error: "Error al obtener historial de nutrición" })
+  }
+})
+
+// ═══════════════════════════════════════════════════════
+// GET /api/profile/:userId/steps-history?page=1&limit=20
+// ═══════════════════════════════════════════════════════
+router.get("/:userId/steps-history", async (req: Request, res: Response) => {
+  try {
+    const userId = req.params.userId as string
+    const page = Math.max(1, parseInt(req.query.page as string) || 1)
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 50)
+
+    const [days, total] = await Promise.all([
+      prisma.dailySteps.findMany({
+        where: { userId },
+        select: {
+          id: true, date: true, steps: true, goal: true,
+          calories: true, distanceKm: true, activeMinutes: true, floors: true,
+        },
+        orderBy: { date: "desc" },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.dailySteps.count({ where: { userId } }),
+    ])
+
+    const items = days.map(d => ({
+      id: d.id,
+      date: d.date,
+      steps: d.steps,
+      goal: d.goal,
+      goalReached: d.steps >= d.goal,
+      calories: d.calories,
+      distance: Math.round(d.distanceKm * 10) / 10,
+      activeMinutes: d.activeMinutes,
+      floors: d.floors,
+      goalPercent: d.goal > 0 ? Math.round((d.steps / d.goal) * 100) : 0,
+    }))
+
+    res.json({ days: items, total, page, totalPages: Math.ceil(total / limit) })
+  } catch (error) {
+    console.error("Steps history error:", error)
+    res.status(500).json({ error: "Error al obtener historial de pasos" })
   }
 })
 

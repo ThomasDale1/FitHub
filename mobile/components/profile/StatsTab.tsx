@@ -85,6 +85,32 @@ export default function StatsTab({ data, loading }: StatsTabProps) {
         )}
       </StatSection>
 
+      {/* Strength PRs */}
+      {(t.totalPRs > 0 || data.strength.estimatedTotal > 0) && (
+        <StatSection title="Fuerza (PRs)" icon="trophy-outline" color="#F59E0B">
+          {data.strength.benchPR > 0 && (
+            <StatRow icon="fitness-outline" label="Bench Press PR" value={`${data.strength.benchPR} kg`} color="#F59E0B" />
+          )}
+          {data.strength.squatPR > 0 && (
+            <StatRow icon="fitness-outline" label="Squat PR" value={`${data.strength.squatPR} kg`} color="#F59E0B" />
+          )}
+          {data.strength.deadliftPR > 0 && (
+            <StatRow icon="fitness-outline" label="Deadlift PR" value={`${data.strength.deadliftPR} kg`} color="#F59E0B" />
+          )}
+          {data.strength.ohpPR > 0 && (
+            <StatRow icon="fitness-outline" label="Overhead Press PR" value={`${data.strength.ohpPR} kg`} color="#F59E0B" />
+          )}
+          {data.strength.rowPR > 0 && (
+            <StatRow icon="fitness-outline" label="Row PR" value={`${data.strength.rowPR} kg`} color="#F59E0B" />
+          )}
+          {data.strength.estimatedTotal > 0 && (
+            <View className="mt-2 pt-2 border-t border-background-elevated">
+              <StatRow icon="podium-outline" label="Total Estimado (B+S+D)" value={`${data.strength.estimatedTotal} kg`} color="#8B5CF6" />
+            </View>
+          )}
+        </StatSection>
+      )}
+
       {/* Activity */}
       <StatSection title="Actividad" icon="walk-outline" color="#10B981">
         <StatRow icon="footsteps-outline" label="Pasos Totales" value={a.totalSteps.toLocaleString()} color="#10B981" />
@@ -128,6 +154,22 @@ export default function StatsTab({ data, loading }: StatsTabProps) {
           )}
           {b.height && <StatRow icon="resize-outline" label="Altura" value={`${b.height} cm`} color="#EC4899" />}
           {b.bmi && <StatRow icon="analytics-outline" label="IMC" value={b.bmi} color="#EC4899" />}
+          {b.recentWeightLogs && b.recentWeightLogs.length > 0 && (
+            <View className="mt-2 pt-2 border-t border-background-elevated">
+              <Text className="text-text-muted text-xs mb-2">Últimos registros</Text>
+              {b.recentWeightLogs.map((log, i) => (
+                <View key={i} className="flex-row items-center py-1">
+                  <Text className="text-text-muted text-xs w-20">
+                    {new Date(log.date).toLocaleDateString("es", { day: "numeric", month: "short" })}
+                  </Text>
+                  <Text className="text-white text-xs font-bold flex-1">{log.weight} kg</Text>
+                  {log.bodyFat !== null && (
+                    <Text className="text-text-secondary text-xs">{log.bodyFat}% BF</Text>
+                  )}
+                </View>
+              ))}
+            </View>
+          )}
         </StatSection>
       )}
 
