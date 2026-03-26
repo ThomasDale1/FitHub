@@ -10,6 +10,7 @@ import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { onboardingAPI } from "@/lib/api";
 import CustomButton from "@/components/CustomButton";
+import { useTour } from "@/context/TourContext";
 
 interface Mission {
   id: string;
@@ -68,6 +69,7 @@ const TOTAL_STEPS = 7;
 
 export default function FirstChallengeScreen() {
   const [loading, setLoading] = useState(false);
+  const { startTour } = useTour();
 
   // Animations
   const fadeAnims = useRef(
@@ -138,6 +140,7 @@ export default function FirstChallengeScreen() {
     setLoading(true);
     try {
       await onboardingAPI.complete();
+      startTour();
       router.replace("/(tabs)" as any);
     } catch (e) {
       console.error("Complete error:", e);

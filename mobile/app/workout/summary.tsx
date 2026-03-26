@@ -3,8 +3,20 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { useEffect, useState } from "react";
+import { useTour } from "@/context/TourContext";
 
 export default function WorkoutSummaryScreen() {
+  const { isActive, completeTour } = useTour();
+  const [tourJustCompleted, setTourJustCompleted] = useState(false);
+
+  useEffect(() => {
+    if (isActive) {
+      setTourJustCompleted(true);
+      completeTour();
+    }
+  }, []);
+
   const { xpEarned, newPRs, totalVolume, durationMinutes, workoutName } =
     useLocalSearchParams<{
       xpEarned: string;
@@ -18,6 +30,22 @@ export default function WorkoutSummaryScreen() {
     <SafeAreaView className="flex-1 bg-background">
       <ScrollView showsVerticalScrollIndicator={false}>
         <View className="px-5 pt-8 pb-12">
+
+          {/* Tour completado banner */}
+          {tourJustCompleted && (
+            <View
+              className="rounded-3xl p-5 mb-6 items-center"
+              style={{ backgroundColor: "#F59E0B15", borderWidth: 1.5, borderColor: "#F59E0B50" }}
+            >
+              <Text style={{ fontSize: 40, marginBottom: 8 }}>🏅</Text>
+              <Text className="text-white font-bold text-xl text-center mb-1">
+                ¡Desafío de bienvenida completado!
+              </Text>
+              <Text className="text-text-secondary text-sm text-center">
+                Ganaste el badge "Explorer" + 100 XP extra
+              </Text>
+            </View>
+          )}
 
           {/* Celebración */}
           <View className="items-center mb-8">

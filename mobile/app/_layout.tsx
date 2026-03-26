@@ -6,6 +6,7 @@ import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
 import { ClerkProvider, ClerkLoaded } from "@clerk/clerk-expo";
 import { tokenCache } from "@/lib/tokenCache";
+import { TourProvider } from "@/context/TourContext";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -19,14 +20,16 @@ export default function RootLayout() {
   return (
     <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
       <ClerkLoaded>
-        <StatusBar style="light" />
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="(auth)" />
-          <Stack.Screen name="(onboarding)" />
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="badges" />
-          <Stack.Screen name="profile" />
-        </Stack>
+        <TourProvider>
+          <StatusBar style="light" />
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="(auth)" />
+            <Stack.Screen name="(onboarding)" />
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="badges" />
+            <Stack.Screen name="profile" />
+          </Stack>
+        </TourProvider>
       </ClerkLoaded>
     </ClerkProvider>
   );

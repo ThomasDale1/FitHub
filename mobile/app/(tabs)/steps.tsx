@@ -18,6 +18,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import Svg, { Circle } from "react-native-svg";
 import { useState, useCallback, useEffect, useRef } from "react";
+import { useFocusEffect } from "@react-navigation/native";
+import { useTour } from "@/context/TourContext";
 import { AppState, type AppStateStatus } from "react-native";
 import { stepsAPI, type WeekDayData } from "@/lib/api";
 import { Pedometer } from "expo-sensors";
@@ -265,6 +267,15 @@ function GoalModal({
 // STEPS SCREEN
 // ═══════════════════════════════════════════════════════
 export default function StepsScreen() {
+  const { isActive, step, advanceStep } = useTour();
+
+  // Tour: advance when user visits Steps (step 1)
+  useFocusEffect(
+    useCallback(() => {
+      if (isActive && step === 1) advanceStep();
+    }, [isActive, step])
+  );
+
   const [todayData, setTodayData] = useState<any>(null);
   const [weekData, setWeekData] = useState<any>(null);
   const [loading, setLoading] = useState(true);

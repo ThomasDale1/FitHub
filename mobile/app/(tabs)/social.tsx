@@ -21,8 +21,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { useState, useCallback, useEffect } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 import { useUser } from "@clerk/clerk-expo";
 import { router } from "expo-router";
+import { useTour } from "@/context/TourContext";
 import {
   socialAPI,
   badgesAPI,
@@ -848,7 +850,15 @@ function CreateChallengeModal({
 // ═══════════════════════════════════════════════════════
 export default function SocialScreen() {
   const { user: clerkUser } = useUser();
+  const { isActive, step, advanceStep } = useTour();
   const [activeTab, setActiveTab] = useState<"feed" | "discover" | "challenges">("feed");
+
+  // Tour: advance when user visits Social (step 0)
+  useFocusEffect(
+    useCallback(() => {
+      if (isActive && step === 0) advanceStep();
+    }, [isActive, step])
+  );
   const [posts, setPosts] = useState<SocialPost[]>([]);
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);

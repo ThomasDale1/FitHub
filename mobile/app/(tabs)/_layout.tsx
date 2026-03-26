@@ -6,8 +6,10 @@ import { setGetTokenFn, socialAPI } from "@/lib/api";
 import { useNotifications } from "@/hooks/useNotifications";
 import { initStepTracking } from "@/lib/stepTracker";
 import { registerBackgroundNotificationHandler } from "@/lib/notifications";
-import { View, Text } from "react-native";
+import { View, Text, StyleSheet } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
+import { useTour } from "@/context/TourContext";
+import TourOverlay from "@/components/TourOverlay";
 
 type IoniconsName = React.ComponentProps<typeof Ionicons>["name"];
 
@@ -65,6 +67,7 @@ function SocialTabIcon({ color, size }: { color: string; size: number }) {
 
 export default function TabsLayout() {
   const { getToken } = useAuth();
+  const { isActive, step, workoutPhase } = useTour();
 
   // Configurar el token function una sola vez
   useEffect(() => {
@@ -78,6 +81,7 @@ export default function TabsLayout() {
   useNotifications();
 
   return (
+    <View style={{ flex: 1 }}>
     <Tabs
       screenOptions={{
         headerShown: false,
@@ -150,5 +154,11 @@ export default function TabsLayout() {
         }}
       />
     </Tabs>
+
+    {/* ── Tour overlay: shown when tour is active on tab-navigation phase */}
+    {isActive && step !== null && !(step === 2 && workoutPhase === "inScreen") && (
+      <TourOverlay key={step} step={step} />
+    )}
+    </View>
   );
 }

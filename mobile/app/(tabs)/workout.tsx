@@ -8,9 +8,11 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
+import { useTour } from "@/context/TourContext";
 import { exerciseAPI, Exercise } from "@/lib/api";
 import { useWorkoutStore } from "@/store/workoutStore";
 import { Image } from "expo-image";
@@ -30,6 +32,14 @@ const BODY_PART_LABELS: Record<string, string> = {
 
 export default function WorkoutScreen() {
   const { activeWorkout, startWorkout } = useWorkoutStore();
+  const { isActive, step, workoutPhase, enterWorkoutScreen } = useTour();
+
+  // Tour: when user lands on Workout tab at step 2, switch to in-screen phase
+  useFocusEffect(
+    useCallback(() => {
+      if (isActive && step === 2 && workoutPhase === "tab") enterWorkoutScreen();
+    }, [isActive, step, workoutPhase])
+  );
 
   const [bodyParts, setBodyParts] = useState<string[]>([]);
   const [selectedBodyPart, setSelectedBodyPart] = useState<string>("chest");
@@ -163,6 +173,28 @@ export default function WorkoutScreen() {
           1,300+ ejercicios con animaciones
         </Text>
       </View>
+
+      {/* ─── TOUR GUIDE BANNER ───────────────────── */}
+      {isActive && step === 2 && workoutPhase === "inScreen" && (
+        <View className="mx-5 mb-3 rounded-2xl overflow-hidden" style={{ borderWidth: 1.5, borderColor: "#F59E0B50", backgroundColor: "#F59E0B08" }}>
+          <View className="flex-row items-center gap-x-3 px-4 py-3">
+            <Text style={{ fontSize: 22 }}>🏋️</Text>
+            <View className="flex-1">
+              <Text className="text-white font-bold text-sm">¡Última misión!</Text>
+              <Text className="text-text-secondary text-xs mt-0.5">
+                Toca "Iniciar workout" y completa tu primera sesión
+              </Text>
+            </View>
+            <View style={{ backgroundColor: "#F59E0B20", borderRadius: 12, paddingHorizontal: 8, paddingVertical: 3 }}>
+              <Text style={{ color: "#F59E0B", fontSize: 11, fontWeight: "700" }}>3/3</Text>
+            </View>
+          </View>
+          {/* Pulsing bar */}
+          <View style={{ height: 3, backgroundColor: "#F59E0B40" }}>
+            <View style={{ width: "100%", height: "100%", backgroundColor: "#F59E0B" }} />
+          </View>
+        </View>
+      )}
 
       {/* ─── BOTÓN INICIAR / CONTINUAR WORKOUT ──── */}
       {activeWorkout.isActive ? (
