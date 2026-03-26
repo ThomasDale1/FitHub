@@ -1,6 +1,7 @@
 // ─────────────────────────────────────────────────────
 // backend/src/lib/userHelpers.ts
-// Shared helpers: level calculation, streak, formatting
+// Shared helpers: level calculation, streak, formatting,
+// and common DB lookups used across all routes
 // ─────────────────────────────────────────────────────
 import { prisma } from "./prisma.js"
 
@@ -69,4 +70,21 @@ export async function updateBestStreak(userId: string, currentStreak: number) {
     where: { id: userId, bestStreak: { lt: currentStreak } },
     data: { bestStreak: currentStreak },
   })
+}
+
+// ─── Shared user lookups ─────────────────────────────
+// Simple lookup by clerkId — used across all routes that
+// need the full User row without heavy relations.
+export async function getUserByClerkId(clerkId: string) {
+  return prisma.user.findUnique({ where: { clerkId } })
+}
+
+// Thin lookup: only returns the Prisma uuid, avoids
+// transferring unneeded columns from the DB.
+export async function getPrismaUserId(clerkId: string): Promise<string | null> {
+  const user = await prisma.user.findUnique({
+    where: { clerkId },
+    select: { id: true },
+  })
+  return user?.id ?? null
 }

@@ -7,6 +7,7 @@ import { prisma } from "../lib/prisma.js"
 import { requireAuth } from "../middleware/auth.js"
 import { getAuth } from "@clerk/express"
 import OpenAI from "openai"
+import { getUserByClerkId } from "../lib/userHelpers.js"
 
 const router = Router()
 router.use(requireAuth)
@@ -14,11 +15,6 @@ router.use(requireAuth)
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 })
-
-// ─── Helper ───────────────────────────────────────────
-async function getUserByClerkId(clerkId: string) {
-  return prisma.user.findUnique({ where: { clerkId } })
-}
 
 // Construir el contexto del usuario para la IA
 async function buildUserContext(userId: string, clientDate?: string): Promise<string> {

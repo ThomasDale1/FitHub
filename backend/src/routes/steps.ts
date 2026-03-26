@@ -7,13 +7,10 @@ import { prisma } from "../lib/prisma.js"
 import { requireAuth } from "../middleware/auth.js"
 import { getAuth } from "@clerk/express"
 import { updateChallengeProgress } from "../lib/challengeProgress.js"
+import { getUserByClerkId } from "../lib/userHelpers.js"
 
 const router = Router()
 router.use(requireAuth)
-
-async function getUserByClerkId(clerkId: string) {
-  return prisma.user.findUnique({ where: { clerkId } })
-}
 
 function estimateCalories(steps: number, weightKg?: number | null): number {
   const factor = weightKg ? weightKg * 0.00057 : 0.04

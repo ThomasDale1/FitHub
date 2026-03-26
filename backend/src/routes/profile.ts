@@ -125,6 +125,15 @@ router.get("/:userId/stats", async (req: Request, res: Response) => {
     const user = await prisma.user.findUnique({ where: { id: targetId } })
     if (!user) { res.status(404).json({ error: "Usuario no encontrado" }); return }
 
+    // Monthly consistency window — computed before the big Promise.all
+    // so it can be used as a filter argument below
+    const clientDate = req.query.today as string | undefined
+    const thirtyDaysAgo = new Date()
+    thirtyDaysAgo.setUTCDate(thirtyDaysAgo.getUTCDate() - 30)
+    thirtyDaysAgo.setUTCHours(0, 0, 0, 0)
+
+    // All queries run in parallel — previously topExercise/firstWorkout/workoutDaysLast30
+    // were fired sequentially after the main Promise.all (3 extra serial roundtrips)
     const [
       totalWorkouts,
       volumeAgg,
@@ -140,6 +149,9 @@ router.get("/:userId/stats", async (req: Request, res: Response) => {
       challengesWon,
       badgesEarned,
       totalBadges,
+      topExercise,
+      firstWorkout,
+      workoutDaysLast30,
     ] = await Promise.all([
       prisma.workout.count({ where: { userId: targetId, isCompleted: true } }),
       prisma.workout.aggregate({ where: { userId: targetId, isCompleted: true }, _sum: { totalVolume: true } }),
@@ -155,36 +167,30 @@ router.get("/:userId/stats", async (req: Request, res: Response) => {
       prisma.challengeParticipant.count({ where: { userId: targetId, isWinner: true } }),
       prisma.userBadge.count({ where: { userId: targetId } }),
       prisma.badge.count(),
+      // Previously sequential — now parallel
+      prisma.workoutSet.groupBy({
+        by: ["exerciseName"],
+        where: { workout: { userId: targetId, isCompleted: true }, isCompleted: true },
+        _count: { exerciseName: true },
+        orderBy: { _count: { exerciseName: "desc" } },
+        take: 1,
+      }),
+      prisma.workout.findFirst({
+        where: { userId: targetId, isCompleted: true },
+        orderBy: { startTime: "asc" },
+        select: { startTime: true },
+      }),
+      prisma.workout.findMany({
+        where: { userId: targetId, isCompleted: true, startTime: { gte: thirtyDaysAgo } },
+        select: { startTime: true },
+      }),
     ])
 
-    // Top exercise
-    const topExercise = await prisma.workoutSet.groupBy({
-      by: ["exerciseName"],
-      where: { workout: { userId: targetId, isCompleted: true }, isCompleted: true },
-      _count: { exerciseName: true },
-      orderBy: { _count: { exerciseName: "desc" } },
-      take: 1,
-    })
-
     // Weekly average
-    const firstWorkout = await prisma.workout.findFirst({
-      where: { userId: targetId, isCompleted: true },
-      orderBy: { startTime: "asc" },
-      select: { startTime: true },
-    })
     const weeksSinceFirst = firstWorkout
       ? Math.max(1, Math.ceil((Date.now() - firstWorkout.startTime.getTime()) / (7 * 24 * 60 * 60 * 1000)))
       : 1
 
-    // Monthly consistency
-    const clientDate = req.query.today as string | undefined
-    const thirtyDaysAgo = new Date()
-    thirtyDaysAgo.setUTCDate(thirtyDaysAgo.getUTCDate() - 30)
-    thirtyDaysAgo.setUTCHours(0, 0, 0, 0)
-    const workoutDaysLast30 = await prisma.workout.findMany({
-      where: { userId: targetId, isCompleted: true, startTime: { gte: thirtyDaysAgo } },
-      select: { startTime: true },
-    })
     const uniqueDays = new Set(workoutDaysLast30.map(w => w.startTime.toISOString().split("T")[0]))
 
     const streak = await calculateStreak(targetId, clientDate)
@@ -328,19 +334,28 @@ router.get("/:userId/charts/:type", async (req: Request, res: Response) => {
 
       case "volume": {
         const weeks = Math.ceil(months * 4.3)
-        const data: Array<{ value: number; label: string }> = []
-        for (let i = weeks - 1; i >= 0; i--) {
+        // Build all week ranges upfront, then aggregate in parallel
+        // (avoids N sequential DB roundtrips — one roundtrip total)
+        const weekRanges = Array.from({ length: weeks }, (_, idx) => {
           const weekStart = new Date()
           weekStart.setUTCHours(0, 0, 0, 0)
-          weekStart.setUTCDate(weekStart.getUTCDate() - weekStart.getUTCDay() - i * 7)
+          weekStart.setUTCDate(weekStart.getUTCDate() - weekStart.getUTCDay() - (weeks - 1 - idx) * 7)
           const weekEnd = new Date(weekStart)
           weekEnd.setUTCDate(weekEnd.getUTCDate() + 7)
-          const agg = await prisma.workout.aggregate({
-            where: { userId, isCompleted: true, startTime: { gte: weekStart, lt: weekEnd } },
-            _sum: { totalVolume: true },
-          })
-          data.push({ value: Math.round(agg._sum?.totalVolume || 0), label: `S${weeks - i}` })
-        }
+          return { weekStart, weekEnd, label: `S${idx + 1}` }
+        })
+        const aggs = await Promise.all(
+          weekRanges.map(({ weekStart, weekEnd }) =>
+            prisma.workout.aggregate({
+              where: { userId, isCompleted: true, startTime: { gte: weekStart, lt: weekEnd } },
+              _sum: { totalVolume: true },
+            })
+          )
+        )
+        const data = weekRanges.map(({ label }, i) => ({
+          value: Math.round(aggs[i]._sum?.totalVolume || 0),
+          label,
+        }))
         res.json({ type: "bar", data }); return
       }
 

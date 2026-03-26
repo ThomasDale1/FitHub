@@ -60,35 +60,40 @@ router.post(
         const firstName = data.first_name ?? "";
         const lastName = data.last_name ?? "";
         const meta = data.unsafe_metadata ?? {};
-        const name =
-          meta.displayName ||
-          `${firstName} ${lastName}`.trim() ||
-          email.split("@")[0] ||
-          "Usuario";
         const avatarUrl = data.image_url ?? null;
         const clerkId = data.id;
 
-        // Username from sign-up form, fallback to email prefix + random suffix
-        let username = meta.username
-          ? String(meta.username).toLowerCase().replace(/[^a-z0-9._]/g, "")
+        // Username from sign-up form, fallback to email prefix + random suffix.
+        // Sanitize both fields with length limits so a malicious client
+        // sending huge unsafeMetadata values cannot bloat the DB.
+        const rawName = typeof meta.displayName === "string" ? meta.displayName : "";
+        const safeName = rawName.trim().slice(0, 100) ||
+          `${firstName} ${lastName}`.trim() ||
+          email.split("@")[0] ||
+          "Usuario";
+
+        let username = typeof meta.username === "string"
+          ? meta.username.toLowerCase().replace(/[^a-z0-9._]/g, "").slice(0, 30)
           : "";
         if (!username || username.length < 3) {
-          username = email.split("@")[0] + "_" + Date.now().toString().slice(-4);
+          username = email.split("@")[0].slice(0, 26) + "_" + Date.now().toString().slice(-4);
         }
 
-        // Ensure uniqueness — if taken, append random suffix
+        // Ensure uniqueness — if taken, append random suffix.
+        // upsert below also has @unique on username; catching P2002 there
+        // would be cleaner, but a pre-check keeps the error message readable.
         const existing = await prisma.user.findUnique({ where: { username } });
         if (existing) {
-          username = username + "_" + Date.now().toString().slice(-4);
+          username = username.slice(0, 26) + "_" + Date.now().toString().slice(-4);
         }
 
         await prisma.user.upsert({
           where: { clerkId },
-          update: { email, name, avatarUrl },
+          update: { email, name: safeName, avatarUrl },
           create: {
             clerkId,
             email,
-            name,
+            name: safeName,
             avatarUrl,
             username,
           },

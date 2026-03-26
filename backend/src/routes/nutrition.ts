@@ -6,26 +6,20 @@ import { Router, Request, Response } from "express"
 import { prisma } from "../lib/prisma.js"
 import { requireAuth } from "../middleware/auth.js"
 import { getAuth } from "@clerk/express"
+import { getUserByClerkId } from "../lib/userHelpers.js"
 
 const router = Router()
 router.use(requireAuth)
 
-// ─── Helper ───────────────────────────────────────────
-async function getUserByClerkId(clerkId: string) {
-  return prisma.user.findUnique({ where: { clerkId } })
-}
+// Obtener o crear el food log del día.
+// goals se pasa desde el handler para evitar un SELECT redundante
+// (el usuario ya fue cargado más arriba en el request).
+type UserGoals = { calorieGoal: number | null; proteinGoal: number | null; carbsGoal: number | null; fatGoal: number | null }
 
-// Obtener o crear el food log del día
-async function getOrCreateFoodLog(userId: string, date?: string) {
+async function getOrCreateFoodLog(userId: string, goals: UserGoals, date?: string) {
   const targetDate = date
     ? new Date(date + "T00:00:00.000Z")
     : new Date(new Date().toISOString().split("T")[0] + "T00:00:00.000Z")
-
-  // Buscar el log del usuario para obtener sus metas
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { calorieGoal: true, proteinGoal: true, carbsGoal: true, fatGoal: true },
-  })
 
   let foodLog = await prisma.foodLog.findUnique({
     where: { userId_date: { userId, date: targetDate } },
@@ -39,10 +33,10 @@ async function getOrCreateFoodLog(userId: string, date?: string) {
       data: {
         userId,
         date: targetDate,
-        calorieGoal: user?.calorieGoal ?? 2000,
-        proteinGoal: user?.proteinGoal ?? 150,
-        carbsGoal: user?.carbsGoal ?? 250,
-        fatGoal: user?.fatGoal ?? 65,
+        calorieGoal: goals.calorieGoal ?? 2000,
+        proteinGoal: goals.proteinGoal ?? 150,
+        carbsGoal: goals.carbsGoal ?? 250,
+        fatGoal: goals.fatGoal ?? 65,
       },
       include: {
         entries: { orderBy: { createdAt: "asc" } },
@@ -87,7 +81,7 @@ router.get("/today", async (req: Request, res: Response) => {
     if (!user) { res.status(404).json({ error: "Usuario no encontrado" }); return }
 
     const clientDate = req.query.today as string | undefined
-    const foodLog = await getOrCreateFoodLog(user.id, clientDate)
+    const foodLog = await getOrCreateFoodLog(user.id, user, clientDate)
 
     // Agrupar entries por mealType
     const meals = {
@@ -128,7 +122,7 @@ router.get("/date/:date", async (req: Request, res: Response) => {
     if (!user) { res.status(404).json({ error: "Usuario no encontrado" }); return }
 
     const dateStr = req.params.date as string // formato: YYYY-MM-DD
-    const foodLog = await getOrCreateFoodLog(user.id, dateStr)
+    const foodLog = await getOrCreateFoodLog(user.id, user, dateStr)
 
     const meals = {
       BREAKFAST: foodLog.entries.filter((e) => e.mealType === "BREAKFAST"),
@@ -177,38 +171,40 @@ router.post("/entry", async (req: Request, res: Response) => {
       return
     }
 
-    const foodLog = await getOrCreateFoodLog(user.id, date)
+    const foodLog = await getOrCreateFoodLog(user.id, user, date)
 
-    await prisma.foodEntry.create({
-      data: {
-        foodLogId: foodLog.id,
-        mealType,
-        name,
-        brand: brand || null,
-        barcode: barcode || null,
-        servingSize: servingSize || 1,
-        servingUnit: servingUnit || "porción",
-        calories,
-        protein: protein || 0,
-        carbs: carbs || 0,
-        fat: fat || 0,
-        fiber: fiber || 0,
-        sugar: sugar || 0,
-        sodium: sodium || 0,
-        source: source || "MANUAL",
-        aiConfidence: aiConfidence || null,
-        imageUrl: imageUrl || null,
-      },
-    })
+    // foodEntry.create and user XP grant in one transaction so they
+    // both succeed or both fail — prevents entry-without-XP inconsistencies
+    await prisma.$transaction([
+      prisma.foodEntry.create({
+        data: {
+          foodLogId: foodLog.id,
+          mealType,
+          name,
+          brand: brand || null,
+          barcode: barcode || null,
+          servingSize: servingSize || 1,
+          servingUnit: servingUnit || "porción",
+          calories,
+          protein: protein || 0,
+          carbs: carbs || 0,
+          fat: fat || 0,
+          fiber: fiber || 0,
+          sugar: sugar || 0,
+          sodium: sodium || 0,
+          source: source || "MANUAL",
+          aiConfidence: aiConfidence || null,
+          imageUrl: imageUrl || null,
+        },
+      }),
+      prisma.user.update({
+        where: { id: user.id },
+        data: { xp: { increment: 5 } },
+      }),
+    ])
 
-    // Recalcular totales
+    // Recalcular totales (outside the transaction — non-critical aggregate)
     const updatedLog = await recalculateTotals(foodLog.id)
-
-    // XP por registrar comida (5 XP por entrada)
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { xp: { increment: 5 } },
-    })
 
     res.json({ foodLog: updatedLog, xpEarned: 5 })
   } catch (error) {
@@ -265,7 +261,7 @@ router.post("/water", async (req: Request, res: Response) => {
       return
     }
 
-    const foodLog = await getOrCreateFoodLog(user.id, date)
+    const foodLog = await getOrCreateFoodLog(user.id, user, date)
 
     const updatedLog = await prisma.foodLog.update({
       where: { id: foodLog.id },
@@ -393,9 +389,11 @@ router.get("/saved", async (req: Request, res: Response) => {
     const user = await getUserByClerkId(clerkId!)
     if (!user) { res.status(404).json({ error: "Usuario no encontrado" }); return }
 
+    // Cap at 100 — realistic upper bound for a personal food library
     const saved = await prisma.savedFood.findMany({
       where: { userId: user.id },
       orderBy: [{ isFavorite: "desc" }, { timesUsed: "desc" }],
+      take: 100,
     })
 
     res.json(saved)

@@ -3,17 +3,9 @@ import { getAuth } from "@clerk/express";
 import { prisma } from "../lib/prisma.js";
 import { sendPushToUser } from "../lib/pushNotifications.js";
 import { finalizeExpiredChallenges } from "../lib/challengeProgress.js";
+import { getPrismaUserId } from "../lib/userHelpers.js";
 
 const router = Router();
-
-// ─── Helper: clerkId → prismaId ──────────────────────
-async function getPrismaUserId(clerkId: string): Promise<string | null> {
-  const user = await prisma.user.findUnique({
-    where: { clerkId },
-    select: { id: true },
-  });
-  return user?.id ?? null;
-}
 
 // ─── GET /api/challenges ──────────────────────────────
 // ?filter=active | mine | available
@@ -287,23 +279,36 @@ router.post("/:id/join", async (req: Request, res: Response) => {
 
     const id = req.params.id as string;
 
-    const [challenge, participantCount] = await Promise.all([
-      prisma.challenge.findUnique({ where: { id } }),
-      prisma.challengeParticipant.count({ where: { challengeId: id } }),
-    ]);
+    const challenge = await prisma.challenge.findUnique({ where: { id } });
 
     if (!challenge) { res.status(404).json({ error: "Challenge no encontrado" }); return; }
     if (challenge.status !== "ACTIVE") { res.status(400).json({ error: "El challenge no está activo" }); return; }
     if (challenge.endDate < new Date()) { res.status(400).json({ error: "El challenge ya terminó" }); return; }
 
-    if (challenge.maxParticipants && participantCount >= challenge.maxParticipants) {
-      res.status(400).json({ error: "El challenge está lleno" });
-      return;
+    // Enforce maxParticipants atomically inside a serializable transaction.
+    // A plain count-then-create has a TOCTOU race: two concurrent joins can
+    // both read count < max, both create, and the limit gets exceeded.
+    let participation;
+    try {
+      participation = await prisma.$transaction(async (tx) => {
+        if (challenge.maxParticipants) {
+          const currentCount = await tx.challengeParticipant.count({ where: { challengeId: id } });
+          if (currentCount >= challenge.maxParticipants) {
+            throw Object.assign(new Error("Challenge lleno"), { isFull: true });
+          }
+        }
+        return tx.challengeParticipant.create({ data: { challengeId: id, userId } });
+      }, { isolationLevel: "Serializable" });
+    } catch (txErr: any) {
+      // P2002 = @@unique([challengeId, userId]) — same user joining twice
+      if (txErr?.code === "P2002") {
+        res.status(400).json({ error: "Ya estás participando en este challenge" }); return;
+      }
+      if (txErr?.isFull) {
+        res.status(400).json({ error: "El challenge está lleno" }); return;
+      }
+      throw txErr;
     }
-
-    const participation = await prisma.challengeParticipant.create({
-      data: { challengeId: id, userId },
-    });
 
     // Notify challenge creator that someone joined
     if (challenge.creatorId !== userId) {
@@ -323,11 +328,6 @@ router.post("/:id/join", async (req: Request, res: Response) => {
 
     res.status(201).json(participation);
   } catch (error: any) {
-    // P2002 = violación del @@unique([challengeId, userId])
-    if (error?.code === "P2002") {
-      res.status(400).json({ error: "Ya estás participando en este challenge" });
-      return;
-    }
     res.status(500).json({ error: "Error al unirse al challenge" });
   }
 });

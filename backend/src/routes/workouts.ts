@@ -8,17 +8,10 @@ import {
 } from "../lib/muscleStimulus.js"
 import { sendPushToUser } from "../lib/pushNotifications.js"
 import { updateChallengeProgress } from "../lib/challengeProgress.js"
+import { getPrismaUserId } from "../lib/userHelpers.js"
 
 const router = Router()
 router.use(requireAuth)
-
-async function getPrismaUserId(clerkId: string): Promise<string | null> {
-  const user = await prisma.user.findUnique({
-    where: { clerkId },
-    select: { id: true },
-  })
-  return user?.id ?? null
-}
 
 // ─── GET /api/workouts ────────────────────────────────
 router.get("/", async (req: Request, res: Response) => {
@@ -245,25 +238,29 @@ router.post("/:id/finish", async (req: Request, res: Response) => {
       durationMinutes
     )
 
-    const finishedWorkout = await prisma.workout.update({
-      where: { id: workoutId },
-      data: {
-        endTime,
-        duration: durationMinutes,
-        totalVolume,
-        xpEarned,
-        isCompleted: true,
-      },
-    })
-
-    await prisma.user.update({
-      where: { id: userId! },
-      data: {
-        xp: { increment: xpEarned },
-        lastWorkout: endTime,
-        streak: { increment: 1 },
-      },
-    })
+    // Atomically mark the workout complete and grant XP in one transaction.
+    // A separate user.update after workout.update risks XP being lost if the
+    // second write fails (e.g. DB timeout, cold-start retries).
+    const [finishedWorkout] = await prisma.$transaction([
+      prisma.workout.update({
+        where: { id: workoutId },
+        data: {
+          endTime,
+          duration: durationMinutes,
+          totalVolume,
+          xpEarned,
+          isCompleted: true,
+        },
+      }),
+      prisma.user.update({
+        where: { id: userId! },
+        data: {
+          xp: { increment: xpEarned },
+          lastWorkout: endTime,
+          streak: { increment: 1 },
+        },
+      }),
+    ])
     try {
       const exerciseNames = [...new Set(
         workout.sets.map((s) => s.exerciseName)
@@ -340,6 +337,7 @@ router.get("/templates", async (req: Request, res: Response) => {
     const { userId: clerkId } = getAuth(req)
     const userId = await getPrismaUserId(clerkId!)
 
+    // Cap at 100 — no user needs more templates than that loaded at once
     const templates = await prisma.workoutTemplate.findMany({
       where: { userId: userId! },
       include: {
@@ -348,6 +346,7 @@ router.get("/templates", async (req: Request, res: Response) => {
         },
       },
       orderBy: { updatedAt: "desc" },
+      take: 100,
     })
 
     res.json(templates)

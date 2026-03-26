@@ -137,10 +137,6 @@ router.put("/me", async (req: Request, res: Response) => {
       if (!/^[a-z0-9._]+$/.test(uname)) {
         res.status(400).json({ error: "Username solo puede tener letras minúsculas, números, puntos y guiones bajos" }); return
       }
-      const existing = await prisma.user.findUnique({ where: { username: uname } })
-      if (existing && existing.id !== user.id) {
-        res.status(409).json({ error: "Este username ya está en uso" }); return
-      }
       updateData.username = uname
     }
 
@@ -151,7 +147,9 @@ router.put("/me", async (req: Request, res: Response) => {
 
     // Delete old avatar from Cloudinary if replacing
     if (updateData.avatarPublicId && user.avatarPublicId && user.avatarPublicId !== updateData.avatarPublicId) {
-      deleteCloudinaryResource(user.avatarPublicId).catch(() => {})
+      deleteCloudinaryResource(user.avatarPublicId).catch((err: unknown) =>
+        console.error("[Cloudinary cleanup failed]", err)
+      )
     }
 
     const updatedUser = await prisma.user.update({
@@ -167,7 +165,11 @@ router.put("/me", async (req: Request, res: Response) => {
       currentXP: levelInfo.currentXP,
       maxXP: levelInfo.maxXP,
     })
-  } catch (error) {
+  } catch (error: any) {
+    // P2002 = @unique constraint on username violated (concurrent update race)
+    if (error?.code === "P2002") {
+      res.status(409).json({ error: "Este username ya está en uso" }); return
+    }
     res.status(500).json({ error: "Error al actualizar perfil" })
   }
 })
@@ -380,41 +382,37 @@ router.get("/progress", async (req: Request, res: Response) => {
       return
     }
 
-    const weeks: Array<{
-      week: string
-      workouts: number
-      volume: number
-      xp: number
-    }> = []
-
-    for (let i = 7; i >= 0; i--) {
+    // Build all 8 week ranges upfront, then aggregate in parallel
+    // (one DB roundtrip per week, all concurrent vs the old sequential for-await)
+    const weekRanges = Array.from({ length: 8 }, (_, i) => {
       const weekStart = new Date()
       weekStart.setUTCHours(0, 0, 0, 0)
-      weekStart.setUTCDate(weekStart.getUTCDate() - weekStart.getUTCDay() - i * 7)
-
+      weekStart.setUTCDate(weekStart.getUTCDate() - weekStart.getUTCDay() - (7 - i) * 7)
       const weekEnd = new Date(weekStart)
       weekEnd.setUTCDate(weekEnd.getUTCDate() + 7)
+      return { weekStart, weekEnd }
+    })
 
-      const weekData = await prisma.workout.aggregate({
-        where: {
-          userId: user.id,
-          isCompleted: true,
-          startTime: { gte: weekStart, lt: weekEnd },
-        },
-        _count: true,
-        _sum: { totalVolume: true, xpEarned: true },
-      })
+    const weekResults = await Promise.all(
+      weekRanges.map(({ weekStart, weekEnd }) =>
+        prisma.workout.aggregate({
+          where: {
+            userId: user.id,
+            isCompleted: true,
+            startTime: { gte: weekStart, lt: weekEnd },
+          },
+          _count: true,
+          _sum: { totalVolume: true, xpEarned: true },
+        })
+      )
+    )
 
-      weeks.push({
-        week: weekStart.toLocaleDateString("es", {
-          month: "short",
-          day: "numeric",
-        }),
-        workouts: weekData._count,
-        volume: Math.round(weekData._sum.totalVolume || 0),
-        xp: weekData._sum.xpEarned || 0,
-      })
-    }
+    const weeks = weekRanges.map(({ weekStart }, i) => ({
+      week: weekStart.toLocaleDateString("es", { month: "short", day: "numeric" }),
+      workouts: weekResults[i]._count,
+      volume: Math.round(weekResults[i]._sum.totalVolume || 0),
+      xp: weekResults[i]._sum.xpEarned || 0,
+    }))
 
     res.json({ weeks })
   } catch (error) {
@@ -467,12 +465,21 @@ router.get("/goals", async (req: Request, res: Response) => {
       return
     }
 
-    const goals = await prisma.goal.findMany({
-      where: { userId: user.id },
-      orderBy: { createdAt: "desc" },
-    })
+    // Paginated: default 20, max 50 to avoid loading all goals at once
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 50)
+    const page = Math.max(1, parseInt(req.query.page as string) || 1)
 
-    res.json(goals)
+    const [goals, total] = await Promise.all([
+      prisma.goal.findMany({
+        where: { userId: user.id },
+        orderBy: { createdAt: "desc" },
+        take: limit,
+        skip: (page - 1) * limit,
+      }),
+      prisma.goal.count({ where: { userId: user.id } }),
+    ])
+
+    res.json({ goals, total, page, totalPages: Math.ceil(total / limit) })
   } catch (error) {
     res.status(500).json({ error: "Error al obtener metas" })
   }

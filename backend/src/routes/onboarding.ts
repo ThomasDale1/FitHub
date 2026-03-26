@@ -7,13 +7,10 @@ import { prisma } from "../lib/prisma.js"
 import { requireAuth } from "../middleware/auth.js"
 import { getAuth } from "@clerk/express"
 
+import { getUserByClerkId } from "../lib/userHelpers.js"
+
 const router = Router()
 router.use(requireAuth)
-
-// Helper
-async function getUserByClerkId(clerkId: string) {
-  return prisma.user.findUnique({ where: { clerkId } })
-}
 
 // ═══════════════════════════════════════════════════════
 // POST /api/onboarding/personal-info — Step 1
