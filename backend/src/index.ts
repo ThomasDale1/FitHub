@@ -6,6 +6,8 @@ import helmet from "helmet";
 import morgan from "morgan";
 import { prisma } from "./lib/prisma.js";
 import { clerkAuth } from "./middleware/auth.js";
+import { globalLimiter, strictLimiter } from "./middleware/rateLimit.js";
+import { errorHandler } from "./middleware/errorHandler.js";
 import exercisesRouter from "./routes/exercise.js";
 import workoutsRouter from './routes/workouts.js'
 import webhooksRouter from './routes/webhooks.js'
@@ -46,6 +48,9 @@ app.use(cors());
 app.use(morgan("dev"));
 app.use(express.json());
 app.use(clerkAuth);
+// Rate limiting global sobre todos los endpoints /api/*
+// strictLimiter se aplica a rutas sensibles individuales (ej: check-username)
+app.use("/api/", globalLimiter);
 
 // ─── RUTAS ────────────────────────────────────────────
 app.get("/", (req, res) => {
@@ -86,6 +91,10 @@ app.use("/api/push-token", pushTokensRouter)
 app.use("/api/onboarding", onboardingRouter)
 app.use("/api/places", placesRouter)
 app.use("/api/profile", profileRouter)       
+
+// ─── MANEJADOR CENTRAL DE ERRORES ─────────────────────
+// Debe ir después de todas las rutas para capturar next(error)
+app.use(errorHandler);
 
 // ─── INICIAR SERVIDOR ─────────────────────────────────
 app.listen(PORT, () => {

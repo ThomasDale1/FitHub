@@ -5,6 +5,7 @@
 import { Router, Request, Response } from "express"
 import { prisma } from "../lib/prisma.js"
 import { requireAuth } from "../middleware/auth.js"
+import { strictLimiter } from "../middleware/rateLimit.js"
 import { getAuth } from "@clerk/express"
 import { isValidCloudinaryUrl, deleteCloudinaryResource } from "../lib/cloudinary.js"
 import { calculateLevel, calculateStreak, updateBestStreak } from "../lib/userHelpers.js"
@@ -66,8 +67,9 @@ router.get("/me", async (req: Request, res: Response) => {
 
 // ═══════════════════════════════════════════════════════
 // GET /api/users/check-username/:username — Verificar disponibilidad
+// strictLimiter: 10 req/min — previene enumeración masiva de usuarios
 // ═══════════════════════════════════════════════════════
-router.get("/check-username/:username", async (req: Request, res: Response) => {
+router.get("/check-username/:username", strictLimiter, async (req: Request, res: Response) => {
   try {
     const { userId: clerkId } = getAuth(req)
     const username = (req.params.username as string).toLowerCase().trim()
