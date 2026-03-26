@@ -328,11 +328,15 @@ export default function NutritionScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [activeMeal, setActiveMeal] = useState<MealType>("BREAKFAST");
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (isRetry = false) => {
     try {
       const response = await nutritionAPI.getToday();
       setFoodLog(response.data);
-    } catch (err) {
+    } catch (err: any) {
+      if (err?.response?.status === 401 && !isRetry) {
+        setTimeout(() => fetchData(true), 1500);
+        return;
+      }
       console.error("Nutrition fetch error:", err);
     } finally {
       setLoading(false);

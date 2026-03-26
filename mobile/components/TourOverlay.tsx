@@ -6,9 +6,9 @@
 import { useEffect, useRef } from "react"
 import { View, Text, Animated, Dimensions, StyleSheet } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
-import type { TourStep } from "@/context/TourContext"
+import { useTour, type TourStep } from "@/context/TourContext"
 
-const { width: SW, height: SH } = Dimensions.get("window")
+const { width: SW } = Dimensions.get("window")
 
 const TAB_BAR_HEIGHT = 65
 const NUM_TABS = 5
@@ -55,7 +55,19 @@ interface TourOverlayProps {
 
 export default function TourOverlay({ step }: TourOverlayProps) {
   const insets = useSafeAreaInsets()
+  const { isTransitioning } = useTour()
   const config = STEP_CONFIG[step]
+
+  // During transition: hide all visuals but keep a full-screen blocker
+  // so user can see the tab content but can't interact with anything
+  if (isTransitioning) {
+    return (
+      <View
+        style={[StyleSheet.absoluteFill]}
+        pointerEvents="box-only"
+      />
+    )
+  }
   const tabWidth = SW / NUM_TABS
   const bottomHeight = TAB_BAR_HEIGHT + insets.bottom
 

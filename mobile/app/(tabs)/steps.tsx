@@ -267,16 +267,17 @@ function GoalModal({
 // STEPS SCREEN
 // ═══════════════════════════════════════════════════════
 export default function StepsScreen() {
-  const { isActive, step, advanceStep } = useTour();
+  const { isActive, step, advanceStep, beginTransition } = useTour();
 
-  // Tour: advance when user visits Steps (step 1) — delay so user has a moment
+  // Tour: hide overlay immediately so user sees the tab, then advance after delay
   useFocusEffect(
     useCallback(() => {
       if (isActive && step === 1) {
+        beginTransition()
         const t = setTimeout(() => advanceStep(), 3000)
         return () => clearTimeout(t)
       }
-    }, [isActive, step])
+    }, [isActive, step, advanceStep, beginTransition])
   );
 
   const [todayData, setTodayData] = useState<any>(null);
@@ -363,7 +364,7 @@ export default function StepsScreen() {
   }, []);
 
   // ─── Fetch data (solo lectura, sin sync) ───────────
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (isRetry = false) => {
     try {
       const [todayRes, weekRes] = await Promise.all([
         stepsAPI.getToday(),
@@ -371,7 +372,12 @@ export default function StepsScreen() {
       ]);
       setTodayData(todayRes.data);
       setWeekData(weekRes.data);
-    } catch (err) {
+    } catch (err: any) {
+      if (err?.response?.status === 401 && !isRetry) {
+        // Token not ready yet (sign-in transition) — retry once after delay
+        setTimeout(() => fetchData(true), 1500);
+        return;
+      }
       console.error("Steps fetch error:", err);
     } finally {
       setLoading(false);

@@ -24,6 +24,17 @@ export const setGetTokenFn = (fn: () => Promise<string | null>) => {
   getTokenFn = fn;
 };
 
+// Returns the current token if available — used by step tracker to skip sync
+// when session is not ready (sign-in transition / sign-out)
+export const getTokenIfAvailable = async (): Promise<string | null> => {
+  if (!getTokenFn) return null;
+  try {
+    return await getTokenFn();
+  } catch {
+    return null;
+  }
+};
+
 api.interceptors.request.use(async (config) => {
   if (getTokenFn) {
     try {

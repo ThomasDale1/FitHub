@@ -850,17 +850,18 @@ function CreateChallengeModal({
 // ═══════════════════════════════════════════════════════
 export default function SocialScreen() {
   const { user: clerkUser } = useUser();
-  const { isActive, step, advanceStep } = useTour();
+  const { isActive, step, advanceStep, beginTransition } = useTour();
   const [activeTab, setActiveTab] = useState<"feed" | "discover" | "challenges">("feed");
 
-  // Tour: advance when user visits Social (step 0) — delay so user has a moment
+  // Tour: hide overlay immediately so user sees the tab, then advance after delay
   useFocusEffect(
     useCallback(() => {
       if (isActive && step === 0) {
-        const t = setTimeout(() => advanceStep(), 1800)
+        beginTransition()
+        const t = setTimeout(() => advanceStep(), 3000)
         return () => clearTimeout(t)
       }
-    }, [isActive, step])
+    }, [isActive, step, advanceStep, beginTransition])
   );
   const [posts, setPosts] = useState<SocialPost[]>([]);
   const [suggestions, setSuggestions] = useState<any[]>([]);
