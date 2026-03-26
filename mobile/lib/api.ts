@@ -684,6 +684,7 @@ export const badgesAPI = {
   markSeen: (slug: string) => api.put(`/api/badges/${slug}/seen`),
   setFeatured: (badgeSlug: string | null) =>
     api.put("/api/badges/featured", { badgeSlug }),
+  grantExplorer: () => api.post("/api/badges/grant-explorer"),
 };
 
 // ─── Enhanced Profile Types ─────────────────────────

@@ -269,10 +269,13 @@ function GoalModal({
 export default function StepsScreen() {
   const { isActive, step, advanceStep } = useTour();
 
-  // Tour: advance when user visits Steps (step 1)
+  // Tour: advance when user visits Steps (step 1) — delay so user has a moment
   useFocusEffect(
     useCallback(() => {
-      if (isActive && step === 1) advanceStep();
+      if (isActive && step === 1) {
+        const t = setTimeout(() => advanceStep(), 3000)
+        return () => clearTimeout(t)
+      }
     }, [isActive, step])
   );
 

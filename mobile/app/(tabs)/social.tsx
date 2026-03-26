@@ -853,10 +853,13 @@ export default function SocialScreen() {
   const { isActive, step, advanceStep } = useTour();
   const [activeTab, setActiveTab] = useState<"feed" | "discover" | "challenges">("feed");
 
-  // Tour: advance when user visits Social (step 0)
+  // Tour: advance when user visits Social (step 0) — delay so user has a moment
   useFocusEffect(
     useCallback(() => {
-      if (isActive && step === 0) advanceStep();
+      if (isActive && step === 0) {
+        const t = setTimeout(() => advanceStep(), 1800)
+        return () => clearTimeout(t)
+      }
     }, [isActive, step])
   );
   const [posts, setPosts] = useState<SocialPost[]>([]);

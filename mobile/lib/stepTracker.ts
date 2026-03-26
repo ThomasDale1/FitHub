@@ -16,10 +16,7 @@ import { Pedometer } from "expo-sensors"
 import { AppState, type AppStateStatus } from "react-native"
 import { stepsAPI, api, BG_AUTH_TOKEN_KEY } from "./api"
 import * as SecureStore from "expo-secure-store"
-import {
-  initHealthSteps,
-  getStepsSinceMidnight as healthGetSteps,
-} from "./healthSteps"
+import { getStepsSinceMidnight as healthGetSteps } from "./healthSteps"
 
 // ─── Task names ──────────────────────────────────────
 export const STEP_SYNC_TASK = "STEP_SYNC_BACKGROUND_TASK"
@@ -50,10 +47,12 @@ async function syncStepsForeground(steps: number): Promise<boolean> {
   try {
     if (steps <= 0) return false
     await stepsAPI.syncSteps(steps)
-    console.log(`🦶 [FG] Synced ${steps} steps`)
     return true
-  } catch (err) {
-    console.error("🦶 [FG] Sync failed:", err)
+  } catch (err: any) {
+    // 401 = user signed out, skip silently
+    if (err?.response?.status !== 401) {
+      console.error("🦶 [FG] Sync failed:", err)
+    }
     return false
   }
 }

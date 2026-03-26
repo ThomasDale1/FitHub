@@ -140,26 +140,22 @@ export default function FirstChallengeScreen() {
     setLoading(true);
     try {
       await onboardingAPI.complete();
-      startTour();
-      router.replace("/(tabs)" as any);
     } catch (e) {
-      console.error("Complete error:", e);
-    } finally {
-      setLoading(false);
+      console.error("Complete error (non-critical):", e);
+      // Non-critical — always start the tour regardless
     }
+    startTour();
+    router.replace("/(tabs)" as any);
   };
 
   return (
     <SafeAreaView className="flex-1 bg-background">
       {/* Progress bar */}
       <View className="px-6 pt-4 pb-2">
-        <View className="flex-row items-center justify-between mb-2">
+        <View className="flex-row items-center mb-2">
           <Text className="text-text-muted text-xs">
             {PROGRESS_STEP} de {TOTAL_STEPS}
           </Text>
-          <TouchableOpacity onPress={() => router.back()}>
-            <Ionicons name="arrow-back" size={20} color="#A0A0B0" />
-          </TouchableOpacity>
         </View>
         <View className="h-1.5 bg-background-elevated rounded-full overflow-hidden">
           <View className="h-full bg-primary rounded-full" style={{ width: "100%" }} />

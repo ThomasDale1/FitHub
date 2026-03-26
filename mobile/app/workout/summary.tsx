@@ -5,6 +5,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useEffect, useState } from "react";
 import { useTour } from "@/context/TourContext";
+import { badgesAPI } from "@/lib/api";
 
 export default function WorkoutSummaryScreen() {
   const { isActive, completeTour } = useTour();
@@ -14,6 +15,8 @@ export default function WorkoutSummaryScreen() {
     if (isActive) {
       setTourJustCompleted(true);
       completeTour();
+      // Grant Explorer badge silently — non-critical
+      badgesAPI.grantExplorer().catch(() => {})
     }
   }, []);
 

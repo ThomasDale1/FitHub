@@ -243,8 +243,20 @@ export default function ProfileScreen() {
               />
             )}
 
+            {/* ─── DEV: Seed badges ────────────────────── */}
+            <TouchableOpacity
+              onPress={() =>
+                badgesAPI.seed()
+                  .then(() => Alert.alert("✅ Done", "Badges seeded in DB!"))
+                  .catch((e) => Alert.alert("Error", e?.message))
+              }
+              className="mt-6 mx-8 py-2 rounded-xl border border-background-elevated items-center"
+            >
+              <Text className="text-text-muted text-xs">🛠 Seed badges (DEV)</Text>
+            </TouchableOpacity>
+
             {/* ─── VERSION INFO ────────────────────────── */}
-            <Text className="text-text-muted text-xs text-center mt-6">
+            <Text className="text-text-muted text-xs text-center mt-4">
               Fit Hub v1.3.0 — Enhanced Profile
             </Text>
           </View>

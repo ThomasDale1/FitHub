@@ -96,6 +96,9 @@ const BADGE_DEFINITIONS = [
   { slug: "logs_30_days", name: "Nutrition Master", description: "Registra comida 30 días seguidos", icon: "🏆", category: "NUTRITION", rarity: "EPIC", requirement: { type: "food_log_streak", value: 30 }, xpReward: 500, sortOrder: 3 },
   { slug: "logs_90_days", name: "Diet Champion", description: "Registra comida 90 días seguidos", icon: "👨‍🍳", category: "NUTRITION", rarity: "LEGENDARY", requirement: { type: "food_log_streak", value: 90 }, xpReward: 1500, sortOrder: 4 },
 
+  // ═══ ONBOARDING ════════════════════════════════════
+  { slug: "explorer", name: "Explorer", description: "Completa el desafío de bienvenida de FitHub", icon: "🏅", category: "MILESTONE", rarity: "COMMON", requirement: { type: "onboarding_complete", value: 1 }, xpReward: 100, sortOrder: 0 },
+
   // ═══ SECRET (hidden until unlocked) ════════════════
   { slug: "midnight_warrior", name: "Midnight Warrior", description: "Completa un workout entre 12am y 4am", icon: "🌙", category: "SECRET", rarity: "RARE", requirement: { type: "midnight_workout", value: 1 }, xpReward: 150, isSecret: true, sortOrder: 1 },
   { slug: "early_bird", name: "Early Bird", description: "Completa un workout antes de las 6am", icon: "🌅", category: "SECRET", rarity: "RARE", requirement: { type: "early_workout", value: 1 }, xpReward: 150, isSecret: true, sortOrder: 2 },
@@ -461,6 +464,43 @@ router.get("/", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Get badges error:", error)
     res.status(500).json({ error: "Error al obtener badges" })
+  }
+})
+
+// ═══════════════════════════════════════════════════════
+// POST /api/badges/grant-explorer — Grant Explorer badge on tour completion
+// ═══════════════════════════════════════════════════════
+router.post("/grant-explorer", async (req: Request, res: Response) => {
+  try {
+    const { userId: clerkId } = getAuth(req)
+    const user = await getUserByClerkId(clerkId!)
+    if (!user) { res.status(404).json({ error: "Usuario no encontrado" }); return }
+
+    const badge = await prisma.badge.findUnique({ where: { slug: "explorer" } })
+    if (!badge) { res.status(404).json({ error: "Badge Explorer no encontrado — ejecuta /seed primero" }); return }
+
+    const already = await prisma.userBadge.findFirst({
+      where: { userId: user.id, badgeId: badge.id },
+    })
+    if (already) { res.json({ alreadyOwned: true }); return }
+
+    await prisma.userBadge.create({ data: { userId: user.id, badgeId: badge.id, isSeen: false } })
+    await prisma.user.update({ where: { id: user.id }, data: { xp: { increment: badge.xpReward } } })
+
+    await prisma.notification.create({
+      data: {
+        userId: user.id,
+        type: "badge",
+        title: `🏅 ¡Nuevo logro: Explorer!`,
+        body: `Completaste el desafío de bienvenida (+${badge.xpReward} XP)`,
+        data: { badgeId: badge.id, slug: badge.slug, rarity: badge.rarity },
+      },
+    })
+
+    res.json({ granted: true, xpEarned: badge.xpReward })
+  } catch (error) {
+    console.error("Grant explorer error:", error)
+    res.status(500).json({ error: "Error al otorgar badge Explorer" })
   }
 })
 
