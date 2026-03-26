@@ -308,7 +308,7 @@ router.post("/quick", async (req: Request, res: Response) => {
       data: { userId: user.id, role: "user", content: message },
     })
 
-    const userContext = await buildUserContext(user.id, typeof quickClientDate === "string" ? quickClientDate : undefined)
+    const userContext = await buildUserContext(user.id)
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",

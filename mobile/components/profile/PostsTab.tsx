@@ -3,10 +3,12 @@
 // Grid of user's social posts
 // ─────────────────────────────────────────────────────
 import { View, Text, TouchableOpacity, ActivityIndicator, Dimensions } from "react-native"
+import { useState } from "react"
 import { Image } from "expo-image"
 import { Ionicons } from "@expo/vector-icons"
 import { transforms } from "@/lib/cloudinary"
 import type { SocialPost } from "@/lib/api"
+import MediaViewerModal, { type MediaViewerItem } from "@/components/MediaViewerModal"
 
 const SCREEN_WIDTH = Dimensions.get("window").width
 const GRID_GAP = 4
@@ -21,14 +23,24 @@ interface PostsTabProps {
   onLoadMore: () => void
 }
 
-function PostTile({ post }: { post: SocialPost }) {
-  const firstImage = post.media?.[0]?.url || post.imageUrls?.[0]
-  const isVideo = post.media?.[0]?.type === "VIDEO"
+function PostTile({ post, onPress }: { post: SocialPost; onPress: (item: MediaViewerItem) => void }) {
+  const firstMedia = post.media?.[0]
+  const firstImage = firstMedia?.url || post.imageUrls?.[0]
+  const isVideo = firstMedia?.type === "VIDEO"
+
+  const handlePress = () => {
+    if (!firstImage) return
+    onPress({
+      url: firstMedia?.url ?? firstImage,
+      type: isVideo ? "VIDEO" : "IMAGE",
+      thumbnailUrl: firstMedia?.thumbnailUrl,
+    })
+  }
 
   return (
     <View style={{ width: TILE_SIZE, height: TILE_SIZE, marginBottom: GRID_GAP }}>
       {firstImage ? (
-        <View className="flex-1 rounded-xl overflow-hidden">
+        <TouchableOpacity activeOpacity={0.88} className="flex-1 rounded-xl overflow-hidden" onPress={handlePress}>
           <Image
             source={{ uri: firstImage.startsWith("https://res.cloudinary.com/") ? transforms.thumbnail(firstImage) : firstImage }}
             style={{ width: "100%", height: "100%" }}
@@ -46,7 +58,7 @@ function PostTile({ post }: { post: SocialPost }) {
               </View>
             )}
           </View>
-        </View>
+        </TouchableOpacity>
       ) : (
         <View className="flex-1 bg-background-card border border-background-elevated rounded-xl p-2 justify-center">
           <Text className="text-text-secondary text-xs" numberOfLines={4}>
@@ -62,6 +74,8 @@ function PostTile({ post }: { post: SocialPost }) {
 }
 
 export default function PostsTab({ posts, loading, loadingMore, hasMore, onLoadMore }: PostsTabProps) {
+  const [viewerItem, setViewerItem] = useState<MediaViewerItem | null>(null)
+
   if (loading) {
     return <ActivityIndicator color="#6C63FF" size="large" className="py-12" />
   }
@@ -79,7 +93,7 @@ export default function PostsTab({ posts, loading, loadingMore, hasMore, onLoadM
     <View>
       <View className="flex-row flex-wrap" style={{ gap: GRID_GAP }}>
         {posts.map(post => (
-          <PostTile key={post.id} post={post} />
+          <PostTile key={post.id} post={post} onPress={setViewerItem} />
         ))}
       </View>
       {hasMore && (
@@ -95,6 +109,11 @@ export default function PostsTab({ posts, loading, loadingMore, hasMore, onLoadM
           )}
         </TouchableOpacity>
       )}
+      <MediaViewerModal
+        visible={viewerItem !== null}
+        item={viewerItem}
+        onClose={() => setViewerItem(null)}
+      />
     </View>
   )
 }

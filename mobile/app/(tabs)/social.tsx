@@ -36,6 +36,7 @@ import {
   transforms,
   type MediaAttachment,
 } from "@/lib/cloudinary";
+import MediaViewerModal, { type MediaViewerItem } from "@/components/MediaViewerModal";
 
 // ─── Reaction Emojis ─────────────────────────────────
 const REACTIONS: Record<string, { emoji: string; label: string }> = {
@@ -67,6 +68,7 @@ function PostCard({
   myUserId: string;
 }) {
   const [showReactions, setShowReactions] = useState(false);
+  const [viewerItem, setViewerItem] = useState<MediaViewerItem | null>(null);
   const typeInfo = POST_TYPE_LABELS[post.postType];
 
   const timeAgo = (dateStr: string) => {
@@ -172,7 +174,15 @@ function PostCard({
       {/* Media (images/video) */}
       {post.media && post.media.length > 0 ? (
         post.media.length === 1 ? (
-          <View className="rounded-2xl overflow-hidden mb-3">
+          <TouchableOpacity
+            activeOpacity={0.92}
+            className="rounded-2xl overflow-hidden mb-3"
+            onPress={() => setViewerItem({
+              url: post.media![0].url,
+              type: post.media![0].type as "IMAGE" | "VIDEO",
+              thumbnailUrl: post.media![0].thumbnailUrl,
+            })}
+          >
             <Image
               source={{
                 uri:
@@ -210,7 +220,7 @@ function PostCard({
                 )}
               </View>
             )}
-          </View>
+          </TouchableOpacity>
         ) : (
           <ScrollView
             horizontal
@@ -220,7 +230,16 @@ function PostCard({
           >
             <View className="flex-row gap-x-2">
               {post.media.map((m) => (
-                <View key={m.id} className="rounded-2xl overflow-hidden">
+                <TouchableOpacity
+                  key={m.id}
+                  activeOpacity={0.92}
+                  className="rounded-2xl overflow-hidden"
+                  onPress={() => setViewerItem({
+                    url: m.url,
+                    type: m.type as "IMAGE" | "VIDEO",
+                    thumbnailUrl: (m as any).thumbnailUrl,
+                  })}
+                >
                   <Image
                     source={{ uri: transforms.thumbnail(m.url) }}
                     style={{ width: 180, height: 180 }}
@@ -228,21 +247,38 @@ function PostCard({
                     recyclingKey={m.url}
                     transition={200}
                   />
-                </View>
+                  {m.type === "VIDEO" && (
+                    <View className="absolute inset-0 items-center justify-center">
+                      <View className="bg-black/50 rounded-full p-2">
+                        <Ionicons name="play" size={18} color="white" />
+                      </View>
+                    </View>
+                  )}
+                </TouchableOpacity>
               ))}
             </View>
           </ScrollView>
         )
       ) : post.imageUrls && post.imageUrls.length > 0 ? (
         /* Backwards compat: old posts with imageUrls only */
-        <View className="rounded-2xl overflow-hidden mb-3">
+        <TouchableOpacity
+          activeOpacity={0.92}
+          className="rounded-2xl overflow-hidden mb-3"
+          onPress={() => setViewerItem({ url: post.imageUrls![0], type: "IMAGE" })}
+        >
           <Image
             source={{ uri: post.imageUrls[0] }}
             style={{ width: "100%", height: 200 }}
             contentFit="cover"
           />
-        </View>
+        </TouchableOpacity>
       ) : null}
+
+      <MediaViewerModal
+        visible={viewerItem !== null}
+        item={viewerItem}
+        onClose={() => setViewerItem(null)}
+      />
 
       {/* Action bar */}
       <View className="flex-row items-center justify-between pt-2 border-t border-background-elevated">
