@@ -86,7 +86,8 @@ router.get("/today", async (req: Request, res: Response) => {
     const user = await getUserByClerkId(clerkId!)
     if (!user) { res.status(404).json({ error: "Usuario no encontrado" }); return }
 
-    const foodLog = await getOrCreateFoodLog(user.id)
+    const clientDate = req.query.today as string | undefined
+    const foodLog = await getOrCreateFoodLog(user.id, clientDate)
 
     // Agrupar entries por mealType
     const meals = {
@@ -323,8 +324,8 @@ router.get("/history", async (req: Request, res: Response) => {
     if (!user) { res.status(404).json({ error: "Usuario no encontrado" }); return }
 
     const sevenDaysAgo = new Date()
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
-    sevenDaysAgo.setHours(0, 0, 0, 0)
+    sevenDaysAgo.setUTCDate(sevenDaysAgo.getUTCDate() - 7)
+    sevenDaysAgo.setUTCHours(0, 0, 0, 0)
 
     const logs = await prisma.foodLog.findMany({
       where: {

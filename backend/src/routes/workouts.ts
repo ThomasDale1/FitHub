@@ -53,14 +53,20 @@ router.post("/start", async (req: Request, res: Response) => {
       return
     }
 
-    const { name, templateId } = req.body
+    const { name, templateId, clientDate } = req.body
+
+    // Use noon UTC of client's local date so streak grouping is correct for any timezone.
+    // If clientDate not provided, fall back to current server UTC time.
+    const startTime = clientDate
+      ? new Date(clientDate + "T12:00:00.000Z")
+      : new Date()
 
     const workout = await prisma.workout.create({
       data: {
         userId,
         templateId: templateId || null,
         name: name || "Workout",
-        startTime: new Date(),
+        startTime,
         isCompleted: false,
       },
     })
@@ -159,7 +165,7 @@ router.post("/:id/sets", async (req: Request, res: Response) => {
         volume: currentVolume,
         oneRepMax: calculate1RM(weight, reps),
         exerciseName,
-        achievedAt: new Date(),
+        achievedAt: workout.startTime, // fecha local del cliente (noon UTC del día local)
       }
 
       if (externalId) {
@@ -222,10 +228,13 @@ router.post("/:id/finish", async (req: Request, res: Response) => {
       return sum + (set.weight ?? 0) * (set.reps ?? 0)
     }, 0)
 
+    // Accept durationMinutes and clientEndHour from client.
+    // clientEndHour (0-23): local hour on the device when finishing — used for midnight/early-bird badge.
+    const { durationMinutes: clientDuration, clientEndHour, clientDate: clientDateFinish } = req.body
     const endTime = new Date()
-    const durationMinutes = Math.round(
-      (endTime.getTime() - workout.startTime.getTime()) / 60000
-    )
+    const durationMinutes = (typeof clientDuration === "number" && clientDuration > 0)
+      ? clientDuration
+      : Math.round((endTime.getTime() - workout.startTime.getTime()) / 60000)
 
     const newPRs = workout.sets.filter((s) => s.isPR).length
 
@@ -288,7 +297,9 @@ router.post("/:id/finish", async (req: Request, res: Response) => {
     // The badge system handles milestone checks, notifications, and auto-posts
     try {
       const { checkBadgesForUser } = await import("./badges.js")
-      checkBadgesForUser(userId!).catch((err: any) =>
+      const endHour = typeof clientEndHour === "number" ? clientEndHour : undefined
+      const clientDate = typeof clientDateFinish === "string" ? clientDateFinish : undefined
+      checkBadgesForUser(userId!, endHour, clientDate).catch((err: any) =>
         console.error("Badge check error (non-blocking):", err)
       )
     } catch (badgeErr) {

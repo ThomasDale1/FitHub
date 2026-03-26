@@ -34,6 +34,8 @@ router.get("/:userId/combo", async (req: Request, res: Response) => {
 
     const isOwnProfile = authUser?.id === user.id
 
+    const clientDate = req.query.today as string | undefined
+
     const [
       featuredBadge,
       primaryPlaceRel,
@@ -64,7 +66,7 @@ router.get("/:userId/combo", async (req: Request, res: Response) => {
             where: { followerId_followingId: { followerId: authUser.id, followingId: user.id } },
           }).then(Boolean)
         : Promise.resolve(false),
-      calculateStreak(user.id),
+      calculateStreak(user.id, clientDate),
       prisma.userBadge.count({ where: { userId: user.id } }),
     ])
 
@@ -175,15 +177,17 @@ router.get("/:userId/stats", async (req: Request, res: Response) => {
       : 1
 
     // Monthly consistency
+    const clientDate = req.query.today as string | undefined
     const thirtyDaysAgo = new Date()
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+    thirtyDaysAgo.setUTCDate(thirtyDaysAgo.getUTCDate() - 30)
+    thirtyDaysAgo.setUTCHours(0, 0, 0, 0)
     const workoutDaysLast30 = await prisma.workout.findMany({
       where: { userId: targetId, isCompleted: true, startTime: { gte: thirtyDaysAgo } },
       select: { startTime: true },
     })
     const uniqueDays = new Set(workoutDaysLast30.map(w => w.startTime.toISOString().split("T")[0]))
 
-    const streak = await calculateStreak(targetId)
+    const streak = await calculateStreak(targetId, clientDate)
     const levelInfo = calculateLevel(user.xp)
 
     // Step goal days via raw query
@@ -302,7 +306,8 @@ router.get("/:userId/charts/:type", async (req: Request, res: Response) => {
     const monthsMap: Record<string, number> = { "1m": 1, "3m": 3, "6m": 6, "1y": 12, "all": 120 }
     const months = monthsMap[period] || 3
     const since = new Date()
-    since.setMonth(since.getMonth() - months)
+    since.setUTCMonth(since.getUTCMonth() - months)
+    since.setUTCHours(0, 0, 0, 0)
 
     switch (type) {
       case "heatmap": {
@@ -326,10 +331,10 @@ router.get("/:userId/charts/:type", async (req: Request, res: Response) => {
         const data: Array<{ value: number; label: string }> = []
         for (let i = weeks - 1; i >= 0; i--) {
           const weekStart = new Date()
-          weekStart.setHours(0, 0, 0, 0)
-          weekStart.setDate(weekStart.getDate() - weekStart.getDay() - i * 7)
+          weekStart.setUTCHours(0, 0, 0, 0)
+          weekStart.setUTCDate(weekStart.getUTCDate() - weekStart.getUTCDay() - i * 7)
           const weekEnd = new Date(weekStart)
-          weekEnd.setDate(weekEnd.getDate() + 7)
+          weekEnd.setUTCDate(weekEnd.getUTCDate() + 7)
           const agg = await prisma.workout.aggregate({
             where: { userId, isCompleted: true, startTime: { gte: weekStart, lt: weekEnd } },
             _sum: { totalVolume: true },
@@ -662,6 +667,8 @@ router.get("/:userId/compare", async (req: Request, res: Response) => {
     const target = await prisma.user.findUnique({ where: { id: targetId } })
     if (!target) { res.status(404).json({ error: "Usuario no encontrado" }); return }
 
+    const clientDate = req.query.today as string | undefined
+
     async function getUserCompareStats(uid: string, u: { name: string; username: string; avatarUrl: string | null; xp: number }) {
       const [totalWorkouts, volumeAgg, totalPRs, stepsAgg, badgesEarned, streak] = await Promise.all([
         prisma.workout.count({ where: { userId: uid, isCompleted: true } }),
@@ -669,11 +676,12 @@ router.get("/:userId/compare", async (req: Request, res: Response) => {
         prisma.personalRecord.count({ where: { userId: uid } }),
         prisma.dailySteps.aggregate({ where: { userId: uid }, _avg: { steps: true } }),
         prisma.userBadge.count({ where: { userId: uid } }),
-        calculateStreak(uid),
+        calculateStreak(uid, clientDate),
       ])
 
       const thirtyDaysAgo = new Date()
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+      thirtyDaysAgo.setUTCDate(thirtyDaysAgo.getUTCDate() - 30)
+      thirtyDaysAgo.setUTCHours(0, 0, 0, 0)
       const workoutDays = await prisma.workout.findMany({
         where: { userId: uid, isCompleted: true, startTime: { gte: thirtyDaysAgo } },
         select: { startTime: true },

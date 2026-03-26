@@ -450,7 +450,10 @@ export const exerciseAPI = {
 // ─── User API (Sprint 2) ─────────────────────────────
 export const userAPI = {
   // Perfil del usuario
-  getProfile: () => api.get<UserProfile>("/api/users/me"),
+  getProfile: () => {
+    const today = new Date().toLocaleDateString("en-CA")
+    return api.get<UserProfile>(`/api/users/me?today=${today}`)
+  },
 
   // Actualizar perfil
   updateProfile: (data: Partial<UserProfile>) =>
@@ -464,7 +467,10 @@ export const userAPI = {
   getStats: () => api.get<UserStats>("/api/users/stats"),
 
   // Dashboard data (stats semanales + recientes)
-  getDashboard: () => api.get<DashboardData>("/api/users/dashboard"),
+  getDashboard: () => {
+    const today = new Date().toLocaleDateString("en-CA")
+    return api.get<DashboardData>(`/api/users/dashboard?today=${today}`)
+  },
 
   // Progreso semanal (últimas 8 semanas)
   getProgress: () => api.get<WeeklyProgress>("/api/users/progress"),
@@ -488,8 +494,8 @@ export const workoutAPI = {
   addSet: (workoutId: string, data: any) =>
     api.post(`/api/workouts/${workoutId}/sets`, data),
 
-  finish: (workoutId: string) =>
-    api.post(`/api/workouts/${workoutId}/finish`),
+  finish: (workoutId: string, durationMinutes?: number) =>
+    api.post(`/api/workouts/${workoutId}/finish`, durationMinutes ? { durationMinutes } : {}),
 
   getTemplates: () => api.get("/api/workouts/templates"),
 
@@ -501,13 +507,16 @@ export const workoutAPI = {
 
 export const nutritionAPI = {
   // Log de hoy
-  getToday: () => api.get<FoodLogData>("/api/nutrition/today"),
- 
+  getToday: () => {
+    const today = new Date().toLocaleDateString("en-CA");
+    return api.get<FoodLogData>(`/api/nutrition/today?today=${today}`);
+  },
+
   // Log de un día específico
   getByDate: (date: string) =>
     api.get<FoodLogData>(`/api/nutrition/date/${date}`),
- 
-  // Agregar alimento
+
+  // Agregar alimento — incluye fecha local por defecto
   addEntry: (data: {
     mealType: string;
     name: string;
@@ -521,14 +530,19 @@ export const nutritionAPI = {
     fiber?: number;
     source?: string;
     date?: string;
-  }) => api.post("/api/nutrition/entry", data),
- 
+  }) => {
+    const localDate = new Date().toLocaleDateString("en-CA");
+    return api.post("/api/nutrition/entry", { date: localDate, ...data });
+  },
+
   // Eliminar alimento
   deleteEntry: (id: string) => api.delete(`/api/nutrition/entry/${id}`),
- 
-  // Agregar agua
-  addWater: (amount: number) =>
-    api.post("/api/nutrition/water", { amount }),
+
+  // Agregar agua — incluye fecha local
+  addWater: (amount: number) => {
+    const date = new Date().toLocaleDateString("en-CA");
+    return api.post("/api/nutrition/water", { amount, date });
+  },
  
   // Actualizar metas
   updateGoals: (data: {
@@ -550,18 +564,24 @@ export const nutritionAPI = {
 export const aiAPI = {
   // Enviar mensaje
   chat: (message: string) =>
-    api.post<{ message: string; xpEarned: number }>("/api/ai/chat", { message }),
- 
+    api.post<{ message: string; xpEarned: number }>("/api/ai/chat", {
+      message,
+      clientDate: new Date().toLocaleDateString("en-CA"),
+    }),
+
   // Historial
   getHistory: () =>
     api.get<{ messages: AiMessage[] }>("/api/ai/history"),
- 
+
   // Borrar historial
   clearHistory: () => api.delete("/api/ai/history"),
- 
+
   // Respuestas rápidas
   quick: (type: "workout_suggestion" | "nutrition_tip" | "motivation" | "recovery") =>
-    api.post<{ message: string; xpEarned: number; type: string }>("/api/ai/quick", { type }),
+    api.post<{ message: string; xpEarned: number; type: string }>("/api/ai/quick", {
+      type,
+      clientDate: new Date().toLocaleDateString("en-CA"),
+    }),
 };
 
 export const socialAPI = {
@@ -982,11 +1002,15 @@ export const pushTokenAPI = {
 
 // ─── Enhanced Profile API ─────────────────────────────
 export const profileAPI = {
-  getCombo: (userId: string) =>
-    api.get<ProfileComboData>(`/api/profile/${userId}/combo`),
+  getCombo: (userId: string) => {
+    const today = new Date().toLocaleDateString("en-CA")
+    return api.get<ProfileComboData>(`/api/profile/${userId}/combo?today=${today}`)
+  },
 
-  getStats: (userId: string) =>
-    api.get<ProfileExpandedStats>(`/api/profile/${userId}/stats`),
+  getStats: (userId: string) => {
+    const today = new Date().toLocaleDateString("en-CA")
+    return api.get<ProfileExpandedStats>(`/api/profile/${userId}/stats?today=${today}`)
+  },
 
   getChart: (userId: string, type: string, period?: string) =>
     api.get<ProfileChartData>(`/api/profile/${userId}/charts/${type}${period ? `?period=${period}` : ""}`),
@@ -1004,8 +1028,10 @@ export const profileAPI = {
   getBadges: (userId: string) =>
     api.get<ProfileBadgesResponse>(`/api/profile/${userId}/badges`),
 
-  getCompare: (userId: string) =>
-    api.get<CompareResponse>(`/api/profile/${userId}/compare`),
+  getCompare: (userId: string) => {
+    const today = new Date().toLocaleDateString("en-CA")
+    return api.get<CompareResponse>(`/api/profile/${userId}/compare?today=${today}`)
+  },
 
   getNutritionHistory: (userId: string, page?: number, limit?: number) =>
     api.get<NutritionHistoryResponse>(
@@ -1042,9 +1068,15 @@ export const stepsAPI = {
     return api.get<{ days: WeekDayData[]; weekTotal: any; avgSteps: number }>(`/api/steps/week?today=${today}`);
   },
 
-  getMonth: (year?: number, month?: number) =>
-    api.get(`/api/steps/month${year ? `?year=${year}&month=${month}` : ""}`),
+  getMonth: (year?: number, month?: number) => {
+    const today = new Date().toLocaleDateString("en-CA")
+    const params = new URLSearchParams({ today })
+    if (year) { params.set("year", String(year)); params.set("month", String(month ?? new Date().getMonth() + 1)) }
+    return api.get(`/api/steps/month?${params.toString()}`)
+  },
 
-  updateGoal: (goal: number) =>
-    api.put("/api/steps/goal", { goal }),
+  updateGoal: (goal: number) => {
+    const date = new Date().toLocaleDateString("en-CA");
+    return api.put("/api/steps/goal", { goal, date });
+  },
 };

@@ -21,7 +21,7 @@ async function getUserByClerkId(clerkId: string) {
 }
 
 // Construir el contexto del usuario para la IA
-async function buildUserContext(userId: string): Promise<string> {
+async function buildUserContext(userId: string, clientDate?: string): Promise<string> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
@@ -73,7 +73,8 @@ async function buildUserContext(userId: string): Promise<string> {
   })
 
   // Nutrición de hoy (si existe)
-  const today = new Date(new Date().toISOString().split("T")[0] + "T00:00:00.000Z")
+  const todayStr = clientDate ?? new Date().toISOString().split("T")[0]
+  const today = new Date(todayStr + "T00:00:00.000Z")
   const todayNutrition = await prisma.foodLog.findUnique({
     where: { userId_date: { userId, date: today } },
     select: {
@@ -153,7 +154,7 @@ router.post("/chat", async (req: Request, res: Response) => {
     const user = await getUserByClerkId(clerkId!)
     if (!user) { res.status(404).json({ error: "Usuario no encontrado" }); return }
 
-    const { message } = req.body
+    const { message, clientDate } = req.body
 
     if (!message || typeof message !== "string") {
       res.status(400).json({ error: "message es requerido" })
@@ -177,7 +178,7 @@ router.post("/chat", async (req: Request, res: Response) => {
     chatHistory.reverse()
 
     // Construir contexto del usuario
-    const userContext = await buildUserContext(user.id)
+    const userContext = await buildUserContext(user.id, typeof clientDate === "string" ? clientDate : undefined)
 
     // Llamar a OpenAI
     const completion = await openai.chat.completions.create({
@@ -285,7 +286,7 @@ router.post("/quick", async (req: Request, res: Response) => {
     const user = await getUserByClerkId(clerkId!)
     if (!user) { res.status(404).json({ error: "Usuario no encontrado" }); return }
 
-    const { type } = req.body // "workout_suggestion" | "nutrition_tip" | "motivation" | "recovery"
+    const { type, clientDate: quickClientDate } = req.body // "workout_suggestion" | "nutrition_tip" | "motivation" | "recovery"
 
     const prompts: Record<string, string> = {
       workout_suggestion: "Basándote en mis últimos workouts, ¿qué debería entrenar hoy? Dame un plan concreto con ejercicios, series y repeticiones.",
@@ -307,7 +308,7 @@ router.post("/quick", async (req: Request, res: Response) => {
       data: { userId: user.id, role: "user", content: message },
     })
 
-    const userContext = await buildUserContext(user.id)
+    const userContext = await buildUserContext(user.id, typeof quickClientDate === "string" ? quickClientDate : undefined)
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",

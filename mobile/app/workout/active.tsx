@@ -51,7 +51,7 @@ export default function ActiveWorkoutScreen() {
     try {
       const { data } = await api.post(
         "/api/workouts/start",
-        { name: activeWorkout.name }
+        { name: activeWorkout.name, clientDate: new Date().toLocaleDateString("en-CA") }
       );
       setWorkoutId(data.id);
     } catch (err) {
@@ -124,7 +124,11 @@ export default function ActiveWorkoutScreen() {
       const workoutName = activeWorkout.name;
       const { data } = await api.post(
         `/api/workouts/${activeWorkout.workoutId}/finish`,
-        {}
+        {
+          durationMinutes: Math.max(1, Math.floor(duration / 60)),
+          clientEndHour: new Date().getHours(), // hora local del cel → badge Midnight Warrior / Early Bird
+          clientDate: new Date().toLocaleDateString("en-CA"), // fecha local del cel → racha de nutrición
+        }
       );
 
       // Navegar ANTES de limpiar el store para que el useEffect no haga router.back()

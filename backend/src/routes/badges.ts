@@ -135,7 +135,7 @@ async function calcStepGoalStreak(userId: string): Promise<number> {
 }
 
 // ─── Calculate food log streak ────────────────────────
-async function calcFoodLogStreak(userId: string): Promise<number> {
+async function calcFoodLogStreak(userId: string, clientDate?: string): Promise<number> {
   const logs = await prisma.foodLog.findMany({
     where: { userId },
     orderBy: { date: "desc" },
@@ -145,14 +145,14 @@ async function calcFoodLogStreak(userId: string): Promise<number> {
   if (logs.length === 0) return 0
 
   let streak = 0
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
+  // Use client's local date so "today" is correct for any timezone
+  const todayStr = clientDate ?? new Date().toISOString().split("T")[0]
+  const today = new Date(todayStr + "T00:00:00.000Z")
 
   for (let i = 0; i < logs.length; i++) {
     const expected = new Date(today)
-    expected.setDate(expected.getDate() - i)
-    const logDate = new Date(logs[i].date)
-    logDate.setHours(0, 0, 0, 0)
+    expected.setUTCDate(expected.getUTCDate() - i)
+    const logDate = new Date(logs[i].date.toISOString().split("T")[0] + "T00:00:00.000Z")
 
     if (logDate.getTime() === expected.getTime()) {
       streak++
@@ -164,7 +164,7 @@ async function calcFoodLogStreak(userId: string): Promise<number> {
 }
 
 // ─── Check secret badge conditions ────────────────────
-async function calcSecretStats(userId: string) {
+async function calcSecretStats(userId: string, clientEndHour?: number) {
   // Get actual workout times for special checks
   const recentWorkouts = await prisma.workout.findMany({
     where: { userId, isCompleted: true, endTime: { not: null } },
@@ -180,11 +180,18 @@ async function calcSecretStats(userId: string) {
   let hasComeback = false
 
   // Check midnight (12am-4am) and early bird (before 6am)
-  for (const w of recentWorkouts) {
-    if (w.endTime) {
-      const hour = w.endTime.getHours()
-      if (hour >= 0 && hour < 4) hasMidnightWorkout = true
-      if (hour < 6) hasEarlyBirdWorkout = true
+  // clientEndHour is the device's local hour when the workout finished (passed from mobile)
+  if (clientEndHour !== undefined) {
+    if (clientEndHour >= 0 && clientEndHour < 4) hasMidnightWorkout = true
+    if (clientEndHour < 6) hasEarlyBirdWorkout = true
+  } else {
+    // Fallback: check historical workouts using UTC hour (best-effort for old data)
+    for (const w of recentWorkouts) {
+      if (w.endTime) {
+        const hour = w.endTime.getUTCHours()
+        if (hour >= 0 && hour < 4) hasMidnightWorkout = true
+        if (hour < 6) hasEarlyBirdWorkout = true
+      }
     }
   }
 
@@ -202,7 +209,7 @@ async function calcSecretStats(userId: string) {
     const d = new Date(w.startTime)
     // Get monday of that week
     const monday = new Date(d)
-    monday.setDate(d.getDate() - ((d.getDay() + 6) % 7))
+    monday.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7))
     const weekKey = monday.toISOString().split("T")[0]
     if (!weekMap.has(weekKey)) weekMap.set(weekKey, new Set())
     weekMap.get(weekKey)!.add(d.toISOString().split("T")[0])
@@ -236,7 +243,7 @@ async function calcSecretStats(userId: string) {
 }
 
 // ─── Gather all stats for badge check ─────────────────
-async function gatherStats(userId: string, userXp: number, userStreak: number) {
+async function gatherStats(userId: string, userXp: number, userStreak: number, clientEndHour?: number, clientDate?: string) {
   const [
     workoutCount,
     volumeResult,
@@ -265,8 +272,8 @@ async function gatherStats(userId: string, userXp: number, userStreak: number) {
     prisma.dailySteps.aggregate({ where: { userId }, _sum: { steps: true } }),
     prisma.reaction.count({ where: { post: { userId } } }),
     calcStepGoalStreak(userId),
-    calcFoodLogStreak(userId),
-    calcSecretStats(userId),
+    calcFoodLogStreak(userId, clientDate),
+    calcSecretStats(userId, clientEndHour),
   ])
 
   const level = calculateLevel(userXp)
@@ -638,11 +645,11 @@ router.put("/featured", async (req: Request, res: Response) => {
 // ═══════════════════════════════════════════════════════
 // Exported helper for internal use (e.g., after workout)
 // ═══════════════════════════════════════════════════════
-export async function checkBadgesForUser(userId: string) {
+export async function checkBadgesForUser(userId: string, clientEndHour?: number, clientDate?: string) {
   const user = await prisma.user.findUnique({ where: { id: userId } })
   if (!user) return { newBadges: [], xpEarned: 0 }
 
-  const stats = await gatherStats(userId, user.xp, user.streak)
+  const stats = await gatherStats(userId, user.xp, user.streak, clientEndHour, clientDate)
 
   const existingBadges = await prisma.userBadge.findMany({
     where: { userId },

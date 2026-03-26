@@ -42,8 +42,9 @@ router.get("/me", async (req: Request, res: Response) => {
       return
     }
 
+    const clientDate = req.query.today as string | undefined
     const levelInfo = calculateLevel(user.xp)
-    const streak = await calculateStreak(user.id)
+    const streak = await calculateStreak(user.id, clientDate)
     updateBestStreak(user.id, streak).catch(() => {})
 
     res.json({
@@ -262,13 +263,14 @@ router.get("/dashboard", async (req: Request, res: Response) => {
       return
     }
 
+    const clientDate = req.query.today as string | undefined
     const levelInfo = calculateLevel(user.xp)
-    const streak = await calculateStreak(user.id)
+    const streak = await calculateStreak(user.id, clientDate)
 
     // Workouts esta semana
     const startOfWeek = new Date()
-    startOfWeek.setHours(0, 0, 0, 0)
-    startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay()) // domingo
+    startOfWeek.setUTCHours(0, 0, 0, 0)
+    startOfWeek.setUTCDate(startOfWeek.getUTCDate() - startOfWeek.getUTCDay()) // domingo
 
     const workoutsThisWeek = await prisma.workout.count({
       where: {
@@ -387,11 +389,11 @@ router.get("/progress", async (req: Request, res: Response) => {
 
     for (let i = 7; i >= 0; i--) {
       const weekStart = new Date()
-      weekStart.setHours(0, 0, 0, 0)
-      weekStart.setDate(weekStart.getDate() - weekStart.getDay() - i * 7)
+      weekStart.setUTCHours(0, 0, 0, 0)
+      weekStart.setUTCDate(weekStart.getUTCDate() - weekStart.getUTCDay() - i * 7)
 
       const weekEnd = new Date(weekStart)
-      weekEnd.setDate(weekEnd.getDate() + 7)
+      weekEnd.setUTCDate(weekEnd.getUTCDate() + 7)
 
       const weekData = await prisma.workout.aggregate({
         where: {

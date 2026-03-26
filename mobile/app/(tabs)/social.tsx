@@ -1195,9 +1195,13 @@ export default function SocialScreen() {
                 const pct = c.goal > 0 && c.myProgress
                   ? Math.min(100, Math.round((c.myProgress.currentValue / c.goal) * 100))
                   : 0;
-                const daysLeft = Math.max(0, Math.ceil(
-                  (new Date(c.endDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
-                ));
+                const msLeft = new Date(c.endDate).getTime() - Date.now();
+                const daysLeft = Math.max(0, Math.ceil(msLeft / (1000 * 60 * 60 * 24)));
+                // Hora de cierre en timezone local del dispositivo (igual para todos, distinta hora local)
+                const endLocal = new Date(c.endDate).toLocaleString("es", {
+                  month: "short", day: "numeric",
+                  hour: "2-digit", minute: "2-digit",
+                });
                 const typeIcons: Record<string, string> = {
                   VOLUME: "barbell", FREQUENCY: "repeat", STREAK: "flame",
                   PR: "trophy", DISTANCE: "walk", CUSTOM: "star",
@@ -1227,7 +1231,9 @@ export default function SocialScreen() {
                           {c.status === "ACTIVE" && (
                             <>
                               <Text className="text-text-muted text-xs">·</Text>
-                              <Text className="text-text-muted text-xs">{daysLeft}d restantes</Text>
+                              <Text className="text-text-muted text-xs">
+                                {daysLeft > 0 ? `${daysLeft}d · ` : ""}Termina {endLocal}
+                              </Text>
                             </>
                           )}
                         </View>

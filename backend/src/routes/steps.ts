@@ -251,8 +251,7 @@ router.get("/month", async (req: Request, res: Response) => {
     const month = parseInt(req.query.month as string) || new Date().getMonth() + 1
 
     const startDate = new Date(`${year}-${String(month).padStart(2, "0")}-01T00:00:00.000Z`)
-    const endDate = new Date(year, month, 0)
-    endDate.setHours(23, 59, 59, 999)
+    const endDate = new Date(`${year}-${String(month).padStart(2, "0")}-${new Date(year, month, 0).getDate()}T23:59:59.999Z`)
 
     const records = await prisma.dailySteps.findMany({
       where: {
@@ -285,11 +284,13 @@ router.get("/month", async (req: Request, res: Response) => {
       allStepDays.map((s) => [s.date.toISOString().split("T")[0], s])
     )
 
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const todayStr = today.toISOString().split("T")[0]
+    // Use client-supplied date if available (consistent with GET /today and GET /week)
+    const clientToday = req.query.today as string | undefined
+    const todayStr = clientToday ?? new Date().toISOString().split("T")[0]
+    const today = new Date(todayStr + "T00:00:00.000Z")
+
     const yesterday = new Date(today)
-    yesterday.setDate(yesterday.getDate() - 1)
+    yesterday.setUTCDate(yesterday.getUTCDate() - 1)
     const yesterdayStr = yesterday.toISOString().split("T")[0]
 
     const todayRec = dayMap.get(todayStr)
@@ -309,7 +310,7 @@ router.get("/month", async (req: Request, res: Response) => {
         const rec = dayMap.get(iter.toISOString().split("T")[0])
         if (!rec || rec.steps < rec.goal) break
         stepStreak++
-        iter.setDate(iter.getDate() - 1)
+        iter.setUTCDate(iter.getUTCDate() - 1)
       }
     }
 
@@ -340,14 +341,15 @@ router.put("/goal", async (req: Request, res: Response) => {
     const user = await getUserByClerkId(clerkId!)
     if (!user) { res.status(404).json({ error: "Usuario no encontrado" }); return }
 
-    const { goal } = req.body
+    const { goal, date } = req.body
 
     if (!goal || goal < 1000 || goal > 100000) {
       res.status(400).json({ error: "Meta debe estar entre 1,000 y 100,000" })
       return
     }
 
-    const today = new Date(new Date().toISOString().split("T")[0] + "T00:00:00.000Z")
+    const todayStr = date || new Date().toISOString().split("T")[0]
+    const today = new Date(todayStr + "T00:00:00.000Z")
 
     await prisma.dailySteps.upsert({
       where: { userId_date: { userId: user.id, date: today } },

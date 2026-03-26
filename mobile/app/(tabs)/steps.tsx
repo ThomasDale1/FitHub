@@ -16,6 +16,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import Svg, { Circle } from "react-native-svg";
 import { useState, useCallback, useEffect, useRef } from "react";
 import { AppState, type AppStateStatus } from "react-native";
 import { stepsAPI, type WeekDayData } from "@/lib/api";
@@ -31,7 +32,7 @@ import Constants from "expo-constants";
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const RING_SIZE = SCREEN_WIDTH * 0.6;
 
-// ─── Progress Ring (SVG-like con View) ───────────────
+// ─── Progress Ring (SVG) ─────────────────────────────
 function ProgressRing({
   percentage,
   steps,
@@ -41,50 +42,46 @@ function ProgressRing({
   steps: number;
   goal: number;
 }) {
-  const clampedPct = Math.min(100, percentage);
-  // Simular ring con bordes
+  const strokeWidth = 14;
+  const radius = (RING_SIZE - strokeWidth) / 2;
+  const cx = RING_SIZE / 2;
+  const cy = RING_SIZE / 2;
+  const clampedPct = Math.min(100, Math.max(0, percentage));
   const ringColor = clampedPct >= 100 ? "#00D48A" : "#00BFFF";
+  const circumference = 2 * Math.PI * radius;
+  // Offset: 0% = full dash hidden, 100% = nothing hidden
+  const strokeDashoffset = circumference * (1 - clampedPct / 100);
 
   return (
-    <View className="items-center justify-center" style={{ width: RING_SIZE, height: RING_SIZE }}>
-      {/* Outer ring background */}
-      <View
-        className="absolute rounded-full"
-        style={{
-          width: RING_SIZE,
-          height: RING_SIZE,
-          borderWidth: 12,
-          borderColor: "#1A2A3A",
-        }}
-      />
-      {/* Progress ring */}
-      <View
-        className="absolute rounded-full"
-        style={{
-          width: RING_SIZE,
-          height: RING_SIZE,
-          borderWidth: 12,
-          borderColor: ringColor,
-          borderTopColor: clampedPct < 25 ? "#1A2A3A" : ringColor,
-          borderRightColor: clampedPct < 50 ? "#1A2A3A" : ringColor,
-          borderBottomColor: clampedPct < 75 ? "#1A2A3A" : ringColor,
-          borderLeftColor: clampedPct < 100 ? "#1A2A3A" : ringColor,
-          transform: [{ rotate: "-90deg" }],
-          opacity: clampedPct > 0 ? 1 : 0,
-        }}
-      />
-      {/* Glow effect when goal reached */}
-      {clampedPct >= 100 && (
-        <View
-          className="absolute rounded-full"
-          style={{
-            width: RING_SIZE + 8,
-            height: RING_SIZE + 8,
-            borderWidth: 2,
-            borderColor: "#00D48A40",
-          }}
+    <View
+      className="items-center justify-center"
+      style={{ width: RING_SIZE, height: RING_SIZE }}
+    >
+      <Svg width={RING_SIZE} height={RING_SIZE} style={{ position: "absolute" }}>
+        {/* Background track */}
+        <Circle
+          cx={cx}
+          cy={cy}
+          r={radius}
+          stroke="#1A2A3A"
+          strokeWidth={strokeWidth}
+          fill="none"
         />
-      )}
+        {/* Progress arc — starts at bottom (6 o'clock), fills clockwise */}
+        <Circle
+          cx={cx}
+          cy={cy}
+          r={radius}
+          stroke={ringColor}
+          strokeWidth={strokeWidth}
+          fill="none"
+          strokeDasharray={`${circumference} ${circumference}`}
+          strokeDashoffset={strokeDashoffset}
+          strokeLinecap="round"
+          transform={`rotate(90, ${cx}, ${cy})`}
+        />
+      </Svg>
+
       {/* Center content */}
       <View className="items-center">
         <Ionicons name="footsteps" size={24} color="#00BFFF" />
@@ -194,6 +191,11 @@ function GoalModal({
 }) {
   const [goal, setGoal] = useState(String(currentGoal));
   const presets = [5000, 7500, 8500, 10000, 12000, 15000];
+
+  // Sync input when modal opens so it always shows the current goal
+  useEffect(() => {
+    if (visible) setGoal(String(currentGoal));
+  }, [visible, currentGoal]);
 
   return (
     <Modal visible={visible} animationType="slide" transparent>

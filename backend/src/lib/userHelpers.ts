@@ -24,7 +24,8 @@ export function calculateLevel(xp: number): { level: number; currentXP: number; 
 }
 
 // ─── Streak calculation ──────────────────────────────
-export async function calculateStreak(userId: string): Promise<number> {
+// clientDate: YYYY-MM-DD from the client's local timezone. If omitted, uses UTC server date.
+export async function calculateStreak(userId: string, clientDate?: string): Promise<number> {
   const workouts = await prisma.workout.findMany({
     where: { userId, isCompleted: true },
     select: { startTime: true },
@@ -38,29 +39,25 @@ export async function calculateStreak(userId: string): Promise<number> {
     workouts.map((w) => w.startTime.toISOString().split("T")[0])
   )
 
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
+  // Use client's local date if provided; otherwise fall back to UTC server date
+  const todayStr = clientDate ?? new Date().toISOString().split("T")[0]
+  const today = new Date(todayStr + "T00:00:00.000Z")
 
-  let streak = 0
-  const checkDate = new Date(today)
-
-  const todayStr = checkDate.toISOString().split("T")[0]
-  checkDate.setDate(checkDate.getDate() - 1)
-  const yesterdayStr = checkDate.toISOString().split("T")[0]
+  const yesterday = new Date(today)
+  yesterday.setUTCDate(yesterday.getUTCDate() - 1)
+  const yesterdayStr = yesterday.toISOString().split("T")[0]
 
   if (!workoutDates.has(todayStr) && !workoutDates.has(yesterdayStr)) {
     return 0
   }
 
-  if (!workoutDates.has(todayStr)) {
-    checkDate.setDate(checkDate.getDate())
-  } else {
-    checkDate.setTime(today.getTime())
-  }
+  // Start counting from today if it has a workout, otherwise from yesterday
+  const checkDate = workoutDates.has(todayStr) ? new Date(today) : new Date(yesterday)
 
+  let streak = 0
   while (workoutDates.has(checkDate.toISOString().split("T")[0])) {
     streak++
-    checkDate.setDate(checkDate.getDate() - 1)
+    checkDate.setUTCDate(checkDate.getUTCDate() - 1)
   }
 
   return streak
