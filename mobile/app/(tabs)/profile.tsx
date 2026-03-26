@@ -179,6 +179,7 @@ export default function ProfileScreen() {
               <EditProfileSection
                 profile={{
                   name: combo.name,
+                  username: combo.username,
                   bio: combo.bio,
                   weight: combo.weight,
                   height: combo.height,

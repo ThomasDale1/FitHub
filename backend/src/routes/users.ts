@@ -64,6 +64,38 @@ router.get("/me", async (req: Request, res: Response) => {
 })
 
 // ═══════════════════════════════════════════════════════
+// GET /api/users/check-username/:username — Verificar disponibilidad
+// ═══════════════════════════════════════════════════════
+router.get("/check-username/:username", async (req: Request, res: Response) => {
+  try {
+    const { userId: clerkId } = getAuth(req)
+    const username = (req.params.username as string).toLowerCase().trim()
+
+    if (!username || username.length < 3) {
+      res.json({ available: false, reason: "El username debe tener al menos 3 caracteres" }); return
+    }
+    if (!/^[a-z0-9._]+$/.test(username)) {
+      res.json({ available: false, reason: "Solo letras minúsculas, números, puntos y guiones bajos" }); return
+    }
+
+    const existing = await prisma.user.findUnique({ where: { username } })
+
+    // If it belongs to the requesting user, it's "available" (they already own it)
+    if (existing) {
+      const currentUser = await prisma.user.findUnique({ where: { clerkId: clerkId! }, select: { id: true } })
+      if (currentUser && existing.id === currentUser.id) {
+        res.json({ available: true }); return
+      }
+      res.json({ available: false, reason: "Este username ya está en uso" }); return
+    }
+
+    res.json({ available: true })
+  } catch (error) {
+    res.status(500).json({ error: "Error al verificar username" })
+  }
+})
+
+// ═══════════════════════════════════════════════════════
 // PUT /api/users/me — Actualizar perfil
 // ═══════════════════════════════════════════════════════
 router.put("/me", async (req: Request, res: Response) => {
@@ -93,6 +125,22 @@ router.put("/me", async (req: Request, res: Response) => {
       if (req.body[field] !== undefined) {
         updateData[field] = req.body[field]
       }
+    }
+
+    // Validate username uniqueness if changing
+    if (updateData.username) {
+      const uname = updateData.username.toLowerCase().trim()
+      if (uname.length < 3) {
+        res.status(400).json({ error: "El username debe tener al menos 3 caracteres" }); return
+      }
+      if (!/^[a-z0-9._]+$/.test(uname)) {
+        res.status(400).json({ error: "Username solo puede tener letras minúsculas, números, puntos y guiones bajos" }); return
+      }
+      const existing = await prisma.user.findUnique({ where: { username: uname } })
+      if (existing && existing.id !== user.id) {
+        res.status(409).json({ error: "Este username ya está en uso" }); return
+      }
+      updateData.username = uname
     }
 
     // Validate avatar URL if provided

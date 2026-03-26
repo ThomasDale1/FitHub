@@ -59,12 +59,28 @@ router.post(
           data.email_addresses?.[0]?.email_address ?? "";
         const firstName = data.first_name ?? "";
         const lastName = data.last_name ?? "";
+        const meta = data.unsafe_metadata ?? {};
         const name =
+          meta.displayName ||
           `${firstName} ${lastName}`.trim() ||
           email.split("@")[0] ||
           "Usuario";
         const avatarUrl = data.image_url ?? null;
         const clerkId = data.id;
+
+        // Username from sign-up form, fallback to email prefix + random suffix
+        let username = meta.username
+          ? String(meta.username).toLowerCase().replace(/[^a-z0-9._]/g, "")
+          : "";
+        if (!username || username.length < 3) {
+          username = email.split("@")[0] + "_" + Date.now().toString().slice(-4);
+        }
+
+        // Ensure uniqueness — if taken, append random suffix
+        const existing = await prisma.user.findUnique({ where: { username } });
+        if (existing) {
+          username = username + "_" + Date.now().toString().slice(-4);
+        }
 
         await prisma.user.upsert({
           where: { clerkId },
@@ -74,14 +90,11 @@ router.post(
             email,
             name,
             avatarUrl,
-            username:
-              email.split("@")[0] +
-              "_" +
-              Date.now().toString().slice(-4),
+            username,
           },
         });
 
-        console.log(`✅ Usuario creado en DB: ${email}`);
+        console.log(`✅ Usuario creado en DB: ${email} (@${username})`);
         break;
       }
 
@@ -91,16 +104,12 @@ router.post(
         const clerkId = data.id;
         const email =
           data.email_addresses?.[0]?.email_address ?? "";
-        const firstName = data.first_name ?? "";
-        const lastName = data.last_name ?? "";
-        const name =
-          `${firstName} ${lastName}`.trim() ||
-          email.split("@")[0];
         const avatarUrl = data.image_url ?? null;
 
+        // Only update email and avatar from Clerk — name is managed by our app
         await prisma.user.update({
           where: { clerkId },
-          data: { email, name, avatarUrl },
+          data: { email, avatarUrl },
         });
 
         console.log(`✅ Usuario actualizado en DB: ${email}`);

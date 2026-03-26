@@ -7,21 +7,24 @@ import {
   TouchableOpacity,
   Alert,
 } from "react-native";
-import { useState } from "react";
+import { useState, useCallback, useRef } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Modal from "@/components/Modal";
 import InputField from "@/components/InputField";
 import CustomButton from "@/components/CustomButton";
 import OAuth from "@/components/OAuth";
+import { userAPI } from "@/lib/api";
 
 export default function SignUpScreen() {
   const { signUp, setActive, isLoaded } = useSignUp();
 
   const [form, setForm] = useState({
     name: "",
+    username: "",
     email: "",
     password: "",
   });
+
 
   const [verification, setVerification] = useState({
     state: "default", // default | pending | success
@@ -30,16 +33,66 @@ export default function SignUpScreen() {
   });
 
   const [loading, setLoading] = useState(false);
+  const [usernameError, setUsernameError] = useState("");
+  const [usernameChecking, setUsernameChecking] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ─── Username validation (debounced) ─────────────────
+  const validateUsername = useCallback((value: string) => {
+    const clean = value.toLowerCase().replace(/[^a-z0-9._]/g, "");
+    setForm(f => ({ ...f, username: clean }));
+    setUsernameError("");
+
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    if (clean.length === 0) return;
+    if (clean.length < 3) {
+      setUsernameError("Mínimo 3 caracteres");
+      return;
+    }
+
+    debounceRef.current = setTimeout(async () => {
+      try {
+        setUsernameChecking(true);
+        const res = await userAPI.checkUsername(clean);
+        if (!res.data.available) {
+          setUsernameError(res.data.reason || "Username no disponible");
+        }
+      } catch {
+        // ignore network errors during typing
+      } finally {
+        setUsernameChecking(false);
+      }
+    }, 500);
+  }, []);
 
   // PASO 1 — Crear cuenta y enviar código
   const handleSignUp = async () => {
     if (!isLoaded) return;
+
+    // Validate fields
+    if (!form.name.trim()) {
+      Alert.alert("Error", "Por favor ingresa tu nombre"); return;
+    }
+    if (!form.username || form.username.length < 3) {
+      Alert.alert("Error", "El username debe tener al menos 3 caracteres"); return;
+    }
+    if (usernameError) {
+      Alert.alert("Error", usernameError); return;
+    }
+
     setLoading(true);
 
     try {
       await signUp.create({
         emailAddress: form.email,
         password: form.password,
+        firstName: form.name.trim().split(" ")[0],
+        lastName: form.name.trim().split(" ").slice(1).join(" ") || undefined,
+        unsafeMetadata: {
+          displayName: form.name.trim(),
+          username: form.username.toLowerCase().trim(),
+        },
       });
 
       await signUp.prepareEmailAddressVerification({
@@ -105,6 +158,23 @@ export default function SignUpScreen() {
           onChangeText={(value) => setForm({ ...form, name: value })}
           autoCapitalize="words"
         />
+        <View>
+          <InputField
+            label="Username"
+            placeholder="tu_username"
+            value={form.username}
+            onChangeText={validateUsername}
+            autoCapitalize="none"
+            autoCorrect={false}
+            error={usernameError}
+          />
+          {usernameChecking && (
+            <Text className="text-text-muted text-xs -mt-2 mb-2 ml-1">Verificando...</Text>
+          )}
+          {!usernameError && !usernameChecking && form.username.length >= 3 && (
+            <Text className="text-green-500 text-xs -mt-2 mb-2 ml-1">Disponible</Text>
+          )}
+        </View>
         <InputField
           label="Email"
           placeholder="tu@email.com"

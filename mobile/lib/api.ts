@@ -456,6 +456,10 @@ export const userAPI = {
   updateProfile: (data: Partial<UserProfile>) =>
     api.put<UserProfile>("/api/users/me", data),
 
+  // Verificar disponibilidad de username
+  checkUsername: (username: string) =>
+    api.get<{ available: boolean; reason?: string }>(`/api/users/check-username/${encodeURIComponent(username)}`),
+
   // Stats del perfil (lifetime stats)
   getStats: () => api.get<UserStats>("/api/users/stats"),
 
