@@ -8,7 +8,11 @@
 //   puntaje gana al finalizar el tiempo
 // ─────────────────────────────────────────────────────
 import { prisma } from "./prisma.js"
-import { sendPushToUser } from "./pushNotifications.js"
+import { sendPushToUser, sendPushToMany } from "./pushNotifications.js"
+
+// XP fractions awarded on challenge completion
+const PARTICIPATION_XP_RATIO = 0.25  // 25% XP for non-winners who participated
+const MIN_XP_RATIO = 0.1             // 10% XP minimum for any progress in TIMED mode
 
 type ProgressContext = {
   userId: string
@@ -44,29 +48,25 @@ export async function updateChallengeProgress(ctx: ProgressContext) {
 
     if (participations.length === 0) return
 
-    for (const participation of participations) {
-      const challenge = participation.challenge
-      let newValue: number | null = null
+    // Calculate all progress values concurrently — each is an independent DB query
+    const newValues = await Promise.all(
+      participations.map(async (participation) => {
+        const challenge = participation.challenge
+        switch (challenge.type) {
+          case "VOLUME":    return calcVolume(ctx.userId, challenge.startDate, now)
+          case "FREQUENCY": return calcFrequency(ctx.userId, challenge.startDate, now)
+          case "STREAK":    return calcStreak(ctx.userId)
+          case "PR":        return calcPRs(ctx.userId, challenge.startDate, now)
+          case "DISTANCE":  return calcDistance(ctx.userId, challenge.startDate, now)
+          case "CUSTOM":    return null
+        }
+      })
+    )
 
-      switch (challenge.type) {
-        case "VOLUME":
-          newValue = await calcVolume(ctx.userId, challenge.startDate, now)
-          break
-        case "FREQUENCY":
-          newValue = await calcFrequency(ctx.userId, challenge.startDate, now)
-          break
-        case "STREAK":
-          newValue = await calcStreak(ctx.userId)
-          break
-        case "PR":
-          newValue = await calcPRs(ctx.userId, challenge.startDate, now)
-          break
-        case "DISTANCE":
-          newValue = await calcDistance(ctx.userId, challenge.startDate, now)
-          break
-        case "CUSTOM":
-          continue
-      }
+    for (let i = 0; i < participations.length; i++) {
+      const participation = participations[i]
+      const challenge = participation.challenge
+      const newValue = newValues[i]
 
       if (newValue === null || newValue === participation.currentValue) continue
 
@@ -134,37 +134,33 @@ export async function finalizeExpiredChallenges() {
     })
 
     for (const challenge of expiredMilestones) {
-      // Nadie llegó al goal a tiempo — cerrar sin ganador
-      await prisma.challenge.update({
-        where: { id: challenge.id },
-        data: { status: "COMPLETED" },
-      })
-
-      // Asignar ranks por progreso
-      for (let i = 0; i < challenge.participants.length; i++) {
-        await prisma.challengeParticipant.update({
-          where: { id: challenge.participants[i].id },
-          data: { rank: i + 1 },
-        })
-      }
-
-      // Notificar a todos que el challenge expiró
-      for (const p of challenge.participants) {
-        await prisma.notification.create({
-          data: {
+      // Nadie llegó al goal a tiempo — cerrar sin ganador, asignar ranks y notificar en paralelo
+      await Promise.all([
+        prisma.challenge.update({
+          where: { id: challenge.id },
+          data: { status: "COMPLETED" },
+        }),
+        ...challenge.participants.map((p, i) =>
+          prisma.challengeParticipant.update({
+            where: { id: p.id },
+            data: { rank: i + 1 },
+          })
+        ),
+        prisma.notification.createMany({
+          data: challenge.participants.map((p) => ({
             userId: p.userId,
             type: "challenge_expired",
             title: `⏰ "${challenge.title}" terminó sin ganador`,
             data: { challengeId: challenge.id },
-          },
-        })
-        sendPushToUser(
-          p.userId,
+          })),
+        }),
+        sendPushToMany(
+          challenge.participants.map((p) => p.userId),
           "⏰ Challenge terminado",
           `"${challenge.title}" terminó. Nadie alcanzó la meta.`,
           { type: "challenge_expired", challengeId: challenge.id }
-        )
-      }
+        ),
+      ])
     }
 
     return {
@@ -236,25 +232,25 @@ async function handleMilestoneWin(
   participationId: string,
   challenge: { id: string; title: string; xpReward: number }
 ) {
-  // Marcar como ganador con rank 1
-  await prisma.challengeParticipant.update({
-    where: { id: participationId },
-    data: { isWinner: true, rank: 1 },
-  })
+  const partialXP = Math.round(challenge.xpReward * PARTICIPATION_XP_RATIO)
 
-  // Dar XP reward al ganador
-  await prisma.user.update({
-    where: { id: userId },
-    data: { xp: { increment: challenge.xpReward } },
-  })
+  // Fetch winner name and update winner state concurrently to avoid a serial stall
+  const [winner] = await Promise.all([
+    prisma.user.findUnique({ where: { id: userId }, select: { name: true } }),
+    prisma.challengeParticipant.update({
+      where: { id: participationId },
+      data: { isWinner: true, rank: 1 },
+    }),
+    prisma.user.update({
+      where: { id: userId },
+      data: { xp: { increment: challenge.xpReward } },
+    }),
+    prisma.challenge.update({
+      where: { id: challenge.id },
+      data: { status: "COMPLETED" },
+    }),
+  ])
 
-  // Cerrar el challenge
-  await prisma.challenge.update({
-    where: { id: challenge.id },
-    data: { status: "COMPLETED" },
-  })
-
-  // Asignar ranks al resto y dar XP parcial
   const otherParticipants = await prisma.challengeParticipant.findMany({
     where: {
       challengeId: challenge.id,
@@ -263,58 +259,56 @@ async function handleMilestoneWin(
     orderBy: { currentValue: "desc" },
   })
 
-  for (let i = 0; i < otherParticipants.length; i++) {
-    const rank = i + 2 // rank 2, 3, 4...
-    const partialXP = Math.round(challenge.xpReward * 0.25) // 25% XP por participar
-    await prisma.challengeParticipant.update({
-      where: { id: otherParticipants[i].id },
-      data: { rank },
-    })
-    await prisma.user.update({
-      where: { id: otherParticipants[i].userId },
-      data: { xp: { increment: partialXP } },
-    })
-  }
-
-  // Notificar al ganador
   const winnerTitle = `🏆 ¡Ganaste "${challenge.title}"!`
   const winnerBody = `¡Primer lugar! +${challenge.xpReward} XP`
-  await prisma.notification.create({
-    data: {
-      userId,
-      type: "challenge_won",
-      title: winnerTitle,
-      data: { challengeId: challenge.id, xpReward: challenge.xpReward, rank: 1 },
-    },
-  })
-  sendPushToUser(userId, winnerTitle, winnerBody, {
-    type: "challenge_won",
-    challengeId: challenge.id,
-  })
+  const loserTitle = `🏁 "${challenge.title}" terminó`
+  const loserBody = `${winner?.name || "Alguien"} llegó primero. +${partialXP} XP por participar`
 
-  // Notificar a los demás que alguien ganó
-  const winner = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { name: true },
-  })
-  const partialXP = Math.round(challenge.xpReward * 0.25)
-
-  for (const p of otherParticipants) {
-    const loserTitle = `🏁 "${challenge.title}" terminó`
-    const loserBody = `${winner?.name || "Alguien"} llegó primero. +${partialXP} XP por participar`
-    await prisma.notification.create({
+  // Dar XP parcial a todos los demás, notificar al ganador y a todos los demás en paralelo
+  const tasks: Promise<unknown>[] = [
+    // Asignar ranks a no-ganadores y dar XP parcial
+    ...otherParticipants.map((p, i) =>
+      prisma.challengeParticipant.update({ where: { id: p.id }, data: { rank: i + 2 } })
+    ),
+    ...otherParticipants.map((p) =>
+      prisma.user.update({ where: { id: p.userId }, data: { xp: { increment: partialXP } } })
+    ),
+    // Notificar al ganador
+    prisma.notification.create({
       data: {
-        userId: p.userId,
-        type: "challenge_ended",
-        title: loserTitle,
-        data: { challengeId: challenge.id, winnerId: userId, xpReward: partialXP },
+        userId,
+        type: "challenge_won",
+        title: winnerTitle,
+        data: { challengeId: challenge.id, xpReward: challenge.xpReward, rank: 1 },
       },
-    })
-    sendPushToUser(p.userId, loserTitle, loserBody, {
-      type: "challenge_ended",
+    }),
+    sendPushToUser(userId, winnerTitle, winnerBody, {
+      type: "challenge_won",
       challengeId: challenge.id,
-    })
+    }),
+  ]
+
+  if (otherParticipants.length > 0) {
+    // Notificar a los demás que alguien ganó (batch)
+    tasks.push(
+      prisma.notification.createMany({
+        data: otherParticipants.map((p) => ({
+          userId: p.userId,
+          type: "challenge_ended",
+          title: loserTitle,
+          data: { challengeId: challenge.id, winnerId: userId, xpReward: partialXP },
+        })),
+      }),
+      sendPushToMany(
+        otherParticipants.map((p) => p.userId),
+        loserTitle,
+        loserBody,
+        { type: "challenge_ended", challengeId: challenge.id }
+      )
+    )
   }
+
+  await Promise.all(tasks)
 }
 
 // ─── TIMED: mejor puntaje gana al expirar ───────────
@@ -341,12 +335,10 @@ async function resolveTimedChallenge(challenge: {
 
   // Participantes ya vienen ordenados por currentValue desc
   const sorted = challenge.participants
-
-  // Asignar ranks y determinar ganador(es)
   const topValue = sorted[0].currentValue
 
-  for (let i = 0; i < sorted.length; i++) {
-    const p = sorted[i]
+  // Calcular rank, isWinner y XP para cada participante (sin DB calls)
+  const results = sorted.map((p, i) => {
     const rank = i + 1
     const isWinner = p.currentValue === topValue && topValue > 0
 
@@ -358,24 +350,11 @@ async function resolveTimedChallenge(challenge: {
       // XP proporcional al progreso (mínimo 10% por participar)
       const progressRatio = Math.min(p.currentValue / challenge.goal, 1)
       xpReward = Math.max(
-        Math.round(challenge.xpReward * 0.1),
+        Math.round(challenge.xpReward * MIN_XP_RATIO),
         Math.round(challenge.xpReward * progressRatio * 0.5)
       )
     }
 
-    await prisma.challengeParticipant.update({
-      where: { id: p.id },
-      data: { rank, isWinner },
-    })
-
-    if (xpReward > 0) {
-      await prisma.user.update({
-        where: { id: p.userId },
-        data: { xp: { increment: xpReward } },
-      })
-    }
-
-    // Notificar
     const title = isWinner
       ? `🏆 ¡Ganaste "${challenge.title}"!`
       : `🏁 "${challenge.title}" terminó`
@@ -383,28 +362,41 @@ async function resolveTimedChallenge(challenge: {
       ? `¡Primer lugar con ${p.currentValue}! +${xpReward} XP`
       : `Quedaste #${rank}. ${xpReward > 0 ? `+${xpReward} XP` : ""}`
 
-    await prisma.notification.create({
-      data: {
+    return { p, rank, isWinner, xpReward, title, body }
+  })
+
+  // Ejecutar todas las escrituras, notificaciones y pushes en paralelo
+  await Promise.all([
+    // Actualizar participantes
+    ...results.map(({ p, rank, isWinner }) =>
+      prisma.challengeParticipant.update({ where: { id: p.id }, data: { rank, isWinner } })
+    ),
+    // Dar XP a quienes corresponde
+    ...results
+      .filter(({ xpReward }) => xpReward > 0)
+      .map(({ p, xpReward }) =>
+        prisma.user.update({ where: { id: p.userId }, data: { xp: { increment: xpReward } } })
+      ),
+    // Crear notificaciones en lote
+    prisma.notification.createMany({
+      data: results.map(({ p, rank, isWinner, xpReward, title }) => ({
         userId: p.userId,
         type: isWinner ? "challenge_won" : "challenge_ended",
         title,
-        data: {
-          challengeId: challenge.id,
-          rank,
-          xpReward,
-          finalValue: p.currentValue,
-        },
-      },
-    })
-    sendPushToUser(p.userId, title, body, {
-      type: isWinner ? "challenge_won" : "challenge_ended",
-      challengeId: challenge.id,
-    })
-  }
-
-  // Cerrar el challenge
-  await prisma.challenge.update({
-    where: { id: challenge.id },
-    data: { status: "COMPLETED" },
-  })
+        data: { challengeId: challenge.id, rank, xpReward, finalValue: p.currentValue },
+      })),
+    }),
+    // Cerrar el challenge
+    prisma.challenge.update({
+      where: { id: challenge.id },
+      data: { status: "COMPLETED" },
+    }),
+    // Push notifications en paralelo (mensajes distintos por rank, no se puede batch en uno)
+    ...results.map(({ p, title, body, isWinner }) =>
+      sendPushToUser(p.userId, title, body, {
+        type: isWinner ? "challenge_won" : "challenge_ended",
+        challengeId: challenge.id,
+      })
+    ),
+  ])
 }

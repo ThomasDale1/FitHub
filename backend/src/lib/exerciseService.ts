@@ -1,6 +1,7 @@
 import axios from "axios";
 
-const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY!;
+const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY;
+if (!RAPIDAPI_KEY) throw new Error("RAPIDAPI_KEY env var is required");
 const BASE_URL = "https://exercisedb.p.rapidapi.com";
 
 const headers = {

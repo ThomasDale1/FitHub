@@ -43,8 +43,7 @@ export function calculateMuscleStimulus(
   const muscleFatigue: Record<string, number> = {}
   const muscleData: Record<string, MuscleStimulus> = {}
 
-  // Procesamos cada ejercicio en orden
-  for (const exercise of exercises.sort((a, b) => a.order - b.order)) {
+  for (const exercise of [...exercises].sort((a, b) => a.order - b.order)) {
 
     // Factor de orden: ejercicio 1 = 1.0, ejercicio 2 = 0.95, etc.
     const orderFactor = Math.max(0.6, 1.0 - (exercise.order - 1) * ORDER_DECAY)
@@ -52,7 +51,6 @@ export function calculateMuscleStimulus(
     for (const activation of exercise.muscleActivations) {
       const muscle = activation.muscleName
 
-      // Inicializar fatiga si no existe
       if (!muscleFatigue[muscle]) muscleFatigue[muscle] = 0
 
       // Factor de fatiga actual para este músculo
@@ -78,7 +76,6 @@ export function calculateMuscleStimulus(
       muscleData[muscle].rawVolume += activation.activationPct * exercise.setsCompleted
       muscleData[muscle].setsCount += exercise.setsCompleted
 
-      // Actualizar fatiga para el siguiente ejercicio
       // Cada set añade fatiga proporcional a la activación
       muscleFatigue[muscle] +=
         activation.activationPct * exercise.setsCompleted * FATIGUE_PER_SET

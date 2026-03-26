@@ -7,6 +7,38 @@ import { prisma } from "./prisma.js";
 
 const expo = new Expo();
 
+// ─── Internal helper: chunk, send in parallel, batch-delete invalid tokens ───
+async function sendMessages(messages: ExpoPushMessage[]): Promise<void> {
+  if (messages.length === 0) return;
+  const chunks = expo.chunkPushNotifications(messages);
+
+  // Send all chunks concurrently instead of sequentially
+  const results = await Promise.all(
+    chunks.map(async (chunk): Promise<ExpoPushTicket[]> => {
+      try {
+        return await expo.sendPushNotificationsAsync(chunk);
+      } catch (err) {
+        console.error("Push chunk error:", err);
+        return [];
+      }
+    })
+  );
+
+  // Collect all invalid tokens, then delete in a single query
+  const invalidTokens: string[] = [];
+  for (let c = 0; c < chunks.length; c++) {
+    for (let i = 0; i < results[c].length; i++) {
+      const ticket = results[c][i];
+      if (ticket.status === "error" && ticket.details?.error === "DeviceNotRegistered") {
+        invalidTokens.push(chunks[c][i].to as string);
+      }
+    }
+  }
+  if (invalidTokens.length > 0) {
+    await prisma.pushToken.deleteMany({ where: { token: { in: invalidTokens } } }).catch(() => {});
+  }
+}
+
 /**
  * Send a push notification to a single user.
  * Non-blocking — errors are logged, never thrown.
@@ -35,25 +67,7 @@ export async function sendPushToUser(
         data: data || {},
       }));
 
-    if (messages.length === 0) return;
-
-    const chunks = expo.chunkPushNotifications(messages);
-
-    for (const chunk of chunks) {
-      try {
-        const tickets: ExpoPushTicket[] = await expo.sendPushNotificationsAsync(chunk);
-        // Clean up invalid tokens
-        for (let i = 0; i < tickets.length; i++) {
-          const ticket = tickets[i];
-          if (ticket.status === "error" && ticket.details?.error === "DeviceNotRegistered") {
-            const invalidToken = (chunk[i] as any).to as string;
-            await prisma.pushToken.deleteMany({ where: { token: invalidToken } }).catch(() => {});
-          }
-        }
-      } catch (err) {
-        console.error("Push chunk error:", err);
-      }
-    }
+    await sendMessages(messages);
   } catch (err) {
     console.error("sendPushToUser error:", err);
   }
@@ -89,24 +103,7 @@ export async function sendPushToMany(
         data: data || {},
       }));
 
-    if (messages.length === 0) return;
-
-    const chunks = expo.chunkPushNotifications(messages);
-
-    for (const chunk of chunks) {
-      try {
-        const tickets = await expo.sendPushNotificationsAsync(chunk);
-        for (let i = 0; i < tickets.length; i++) {
-          const ticket = tickets[i];
-          if (ticket.status === "error" && ticket.details?.error === "DeviceNotRegistered") {
-            const invalidToken = (chunk[i] as any).to as string;
-            await prisma.pushToken.deleteMany({ where: { token: invalidToken } }).catch(() => {});
-          }
-        }
-      } catch (err) {
-        console.error("Push chunk error:", err);
-      }
-    }
+    await sendMessages(messages);
   } catch (err) {
     console.error("sendPushToMany error:", err);
   }
