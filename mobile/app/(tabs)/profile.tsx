@@ -75,13 +75,14 @@ export default function ProfileScreen() {
 
     setUploadingAvatar(true)
     try {
-      const response = await fetch(image.uri)
-      const blob = await response.blob()
-      await clerkUser?.setProfileImage({ file: blob })
+      await clerkUser?.setProfileImage({
+        file: { uri: image.uri, type: "image/jpeg", name: "avatar.jpg" } as unknown as File,
+      })
       // Clerk fires user.updated webhook which syncs avatarUrl to DB.
       // Refetch after a short delay to pick up the webhook update.
       setTimeout(() => refetchCombo(), 2000)
-    } catch {
+    } catch (err) {
+      console.error("[avatar upload]", err)
       Alert.alert("Error", "No se pudo subir la foto de perfil")
     } finally {
       setUploadingAvatar(false)

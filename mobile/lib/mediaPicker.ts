@@ -3,7 +3,7 @@
 // Avatar picker + compression
 // ─────────────────────────────────────────────────────
 import * as ImagePicker from "expo-image-picker"
-import * as ImageManipulator from "expo-image-manipulator"
+import { ImageManipulator, SaveFormat } from "expo-image-manipulator"
 import { Alert } from "react-native"
 
 // ─── Pick avatar (square crop) ──────────────────────
@@ -23,10 +23,10 @@ export async function pickAvatar(): Promise<{ uri: string } | null> {
 
   if (result.canceled || !result.assets?.length) return null
 
-  const image = await ImageManipulator.manipulate(result.assets[0].uri)
-    .resize({ width: 500, height: 500 })
-    .renderAsync()
-  const saved = await image.saveAsync({ compress: 0.85, format: ImageManipulator.SaveFormat.JPEG })
+  const ctx = ImageManipulator.manipulate(result.assets[0].uri)
+  ctx.resize({ width: 500, height: 500 })
+  const imageRef = await ctx.renderAsync()
+  const saved = await imageRef.saveAsync({ compress: 0.85, format: SaveFormat.JPEG })
 
   return { uri: saved.uri }
 }
