@@ -113,19 +113,13 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="workout"
         options={{
-          title: "Workout",
-          tabBarIcon: ({ color, size }) => (
-            <TabIcon name="barbell" color={color} size={size} />
-          ),
+          href: null, // oculta del tab bar
         }}
       />
       <Tabs.Screen
         name="steps"
         options={{
-          title: "Pasos",
-          tabBarIcon: ({ color, size }) => (
-            <TabIcon name="footsteps" color={color} size={size} />
-          ),
+          href: null, // oculta del tab bar
         }}
       />
       <Tabs.Screen
@@ -134,6 +128,15 @@ export default function TabsLayout() {
           title: "Social",
           tabBarIcon: ({ color, size }) => (
             <SocialTabIcon color={color} size={size} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="challenges"
+        options={{
+          title: "Retos",
+          tabBarIcon: ({ color, size }) => (
+            <TabIcon name="trophy-outline" color={color} size={size} />
           ),
         }}
       />
