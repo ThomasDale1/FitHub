@@ -5,7 +5,6 @@
 import { View, Text } from "react-native"
 import { Image } from "expo-image"
 import { Ionicons } from "@expo/vector-icons"
-import { transforms } from "@/lib/cloudinary"
 import type { CompareResponse, CompareMetric } from "@/lib/api"
 
 function CompareMetricRow({ metric }: { metric: CompareMetric }) {
@@ -47,7 +46,7 @@ function UserAvatar({ name, avatarUrl, level }: { name: string; avatarUrl: strin
     <View className="items-center">
       {avatarUrl ? (
         <Image
-          source={{ uri: avatarUrl.startsWith("https://res.cloudinary.com/") ? transforms.avatarSmall(avatarUrl) : avatarUrl }}
+          source={{ uri: avatarUrl }}
           style={{ width: 50, height: 50, borderRadius: 25 }}
         />
       ) : (

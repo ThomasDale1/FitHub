@@ -5,10 +5,9 @@
 import { View, Text, TouchableOpacity } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 
-export type ProfileTab = "posts" | "stats" | "charts" | "history" | "badges"
+export type ProfileTab = "stats" | "charts" | "history" | "badges"
 
 const TABS: { key: ProfileTab; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
-  { key: "posts", label: "Posts", icon: "grid-outline" },
   { key: "stats", label: "Stats", icon: "stats-chart-outline" },
   { key: "charts", label: "Gráficas", icon: "analytics-outline" },
   { key: "history", label: "Historial", icon: "time-outline" },

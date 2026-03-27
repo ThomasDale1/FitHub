@@ -19,14 +19,12 @@ import { Ionicons } from "@expo/vector-icons"
 import { useState, useCallback } from "react"
 import { router } from "expo-router"
 import { useProfile } from "@/hooks/useUserData"
-import { useProfileCombo, useProfileStats, useProfilePosts, useProfileHistory, useProfileBadges, useNutritionHistory, useStepsHistory } from "@/hooks/useProfile"
+import { useProfileCombo, useProfileStats, useProfileHistory, useProfileBadges, useNutritionHistory, useStepsHistory } from "@/hooks/useProfile"
 import { badgesAPI, userAPI } from "@/lib/api"
 import { pickAvatar } from "@/lib/mediaPicker"
-import { uploadToCloudinary } from "@/lib/cloudinary"
 
 import ProfileHeader from "@/components/profile/ProfileHeader"
 import ProfileTabBar, { type ProfileTab } from "@/components/profile/ProfileTabBar"
-import PostsTab from "@/components/profile/PostsTab"
 import StatsTab from "@/components/profile/StatsTab"
 import HistoryTab from "@/components/profile/HistoryTab"
 import ChartsTab from "@/components/profile/ChartsTab"
@@ -39,20 +37,19 @@ import EditProfileSection from "@/components/profile/EditProfileSection"
 export default function ProfileScreen() {
   const { user: clerkUser } = useUser()
   const { signOut } = useAuth()
-  const { profile, refetch: refetchOldProfile, updateProfile } = useProfile()
+  const { profile, refetch: refetchOldProfile } = useProfile()
 
   // Get own user ID from old profile hook, then use enhanced profile
   const userId = profile?.id || null
 
   const { data: combo, loading: comboLoading, refetch: refetchCombo } = useProfileCombo(userId)
   const { data: stats, loading: statsLoading, refetch: refetchStats } = useProfileStats(userId)
-  const { posts, loading: postsLoading, loadingMore: postsLoadingMore, hasMore: postsHasMore, refetch: refetchPosts, fetchMore: fetchMorePosts } = useProfilePosts(userId)
   const { workouts, loading: historyLoading, loadingMore: historyLoadingMore, total: historyTotal, hasMore: historyHasMore, refetch: refetchHistory, fetchMore: fetchMoreHistory } = useProfileHistory(userId)
   const { logs: nutritionLogs, loading: nutritionLoading, loadingMore: nutritionLoadingMore, total: nutritionTotal, hasMore: nutritionHasMore, refetch: refetchNutrition, fetchMore: fetchMoreNutrition } = useNutritionHistory(userId)
   const { days: stepsDays, loading: stepsLoading, loadingMore: stepsLoadingMore, total: stepsTotal, hasMore: stepsHasMore, refetch: refetchSteps, fetchMore: fetchMoreSteps } = useStepsHistory(userId)
   const { data: badgesData, loading: badgesLoading, refetch: refetchBadges } = useProfileBadges(userId)
 
-  const [activeTab, setActiveTab] = useState<ProfileTab>("posts")
+  const [activeTab, setActiveTab] = useState<ProfileTab>("stats")
   const [refreshing, setRefreshing] = useState(false)
   const [editing, setEditing] = useState(false)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
@@ -63,7 +60,6 @@ export default function ProfileScreen() {
       refetchOldProfile(),
       refetchCombo(),
       refetchStats(),
-      refetchPosts(),
       refetchHistory(),
       refetchNutrition(),
       refetchSteps(),
@@ -71,7 +67,7 @@ export default function ProfileScreen() {
       badgesAPI.check().catch(() => {}),
     ])
     setRefreshing(false)
-  }, [refetchOldProfile, refetchCombo, refetchStats, refetchPosts, refetchHistory, refetchNutrition, refetchSteps, refetchBadges])
+  }, [refetchOldProfile, refetchCombo, refetchStats, refetchHistory, refetchNutrition, refetchSteps, refetchBadges])
 
   const handleChangeAvatar = async () => {
     const image = await pickAvatar()
@@ -79,9 +75,12 @@ export default function ProfileScreen() {
 
     setUploadingAvatar(true)
     try {
-      const result = await uploadToCloudinary(image, { folder: "fithub/avatars" })
-      await updateProfile({ avatarUrl: result.secure_url, avatarPublicId: result.public_id })
-      refetchCombo()
+      const response = await fetch(image.uri)
+      const blob = await response.blob()
+      await clerkUser?.setProfileImage({ file: blob })
+      // Clerk fires user.updated webhook which syncs avatarUrl to DB.
+      // Refetch after a short delay to pick up the webhook update.
+      setTimeout(() => refetchCombo(), 2000)
     } catch {
       Alert.alert("Error", "No se pudo subir la foto de perfil")
     } finally {
@@ -194,16 +193,6 @@ export default function ProfileScreen() {
             <ProfileTabBar activeTab={activeTab} onTabChange={setActiveTab} />
 
             {/* ─── TAB CONTENT ─────────────────────────── */}
-            {activeTab === "posts" && (
-              <PostsTab
-                posts={posts}
-                loading={postsLoading}
-                loadingMore={postsLoadingMore}
-                hasMore={postsHasMore}
-                onLoadMore={fetchMorePosts}
-              />
-            )}
-
             {activeTab === "stats" && (
               <StatsTab data={stats} loading={statsLoading} />
             )}

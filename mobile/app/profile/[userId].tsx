@@ -17,7 +17,6 @@ import { router, useLocalSearchParams } from "expo-router"
 import {
   useProfileCombo,
   useProfileStats,
-  useProfilePosts,
   useProfileHistory,
   useProfileBadges,
   useNutritionHistory,
@@ -26,7 +25,6 @@ import {
 
 import ProfileHeader from "@/components/profile/ProfileHeader"
 import ProfileTabBar, { type ProfileTab } from "@/components/profile/ProfileTabBar"
-import PostsTab from "@/components/profile/PostsTab"
 import StatsTab from "@/components/profile/StatsTab"
 import ChartsTab from "@/components/profile/ChartsTab"
 import HistoryTab from "@/components/profile/HistoryTab"
@@ -37,22 +35,21 @@ export default function PublicProfileScreen() {
 
   const { data: combo, loading: comboLoading, refetch: refetchCombo } = useProfileCombo(userId)
   const { data: stats, loading: statsLoading, refetch: refetchStats } = useProfileStats(userId)
-  const { posts, loading: postsLoading, loadingMore: postsLoadingMore, hasMore: postsHasMore, refetch: refetchPosts, fetchMore: fetchMorePosts } = useProfilePosts(userId)
   const { workouts, loading: historyLoading, loadingMore: historyLoadingMore, total: historyTotal, hasMore: historyHasMore, refetch: refetchHistory, fetchMore: fetchMoreHistory } = useProfileHistory(userId)
   const { logs: nutritionLogs, loading: nutritionLoading, loadingMore: nutritionLoadingMore, total: nutritionTotal, hasMore: nutritionHasMore, refetch: refetchNutrition, fetchMore: fetchMoreNutrition } = useNutritionHistory(userId)
   const { days: stepsDays, loading: stepsLoading, loadingMore: stepsLoadingMore, total: stepsTotal, hasMore: stepsHasMore, refetch: refetchSteps, fetchMore: fetchMoreSteps } = useStepsHistory(userId)
   const { data: badgesData, loading: badgesLoading, refetch: refetchBadges } = useProfileBadges(userId)
 
-  const [activeTab, setActiveTab] = useState<ProfileTab>("posts")
+  const [activeTab, setActiveTab] = useState<ProfileTab>("stats")
   const [refreshing, setRefreshing] = useState(false)
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
     await Promise.all([
-      refetchCombo(), refetchStats(), refetchPosts(), refetchHistory(), refetchNutrition(), refetchSteps(), refetchBadges(),
+      refetchCombo(), refetchStats(), refetchHistory(), refetchNutrition(), refetchSteps(), refetchBadges(),
     ])
     setRefreshing(false)
-  }, [refetchCombo, refetchStats, refetchPosts, refetchHistory, refetchNutrition, refetchSteps, refetchBadges])
+  }, [refetchCombo, refetchStats, refetchHistory, refetchNutrition, refetchSteps, refetchBadges])
 
   if (comboLoading && !combo) {
     return (
@@ -89,16 +86,6 @@ export default function PublicProfileScreen() {
           <ProfileTabBar activeTab={activeTab} onTabChange={setActiveTab} />
 
           {/* Tab content */}
-          {activeTab === "posts" && (
-            <PostsTab
-              posts={posts}
-              loading={postsLoading}
-              loadingMore={postsLoadingMore}
-              hasMore={postsHasMore}
-              onLoadMore={fetchMorePosts}
-            />
-          )}
-
           {activeTab === "stats" && (
             <StatsTab data={stats} loading={statsLoading} />
           )}

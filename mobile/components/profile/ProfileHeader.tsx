@@ -9,7 +9,6 @@ import { LinearGradient } from "expo-linear-gradient"
 import { router } from "expo-router"
 import { useState } from "react"
 import { type ProfileComboData, socialAPI } from "@/lib/api"
-import { transforms } from "@/lib/cloudinary"
 import XPBar from "@/components/XPBar"
 import ShowcaseSelector from "@/components/profile/ShowcaseSelector"
 
@@ -85,7 +84,7 @@ export default function ProfileHeader({ data, onEditPress, onAvatarPress, upload
           >
             {avatarUrl ? (
               <Image
-                source={{ uri: avatarUrl.startsWith("https://res.cloudinary.com/") ? transforms.avatarLarge(avatarUrl) : avatarUrl }}
+                source={{ uri: avatarUrl }}
                 style={{ width: 100, height: 100, borderRadius: 50, borderWidth: glow.borderWidth, borderColor: glow.borderColor }}
               />
             ) : (

@@ -234,51 +234,6 @@ export interface AiMessage {
   createdAt: string;
 }
 
-export interface PostMedia {
-  id: string;
-  url: string;
-  type: "IMAGE" | "VIDEO";
-  width: number | null;
-  height: number | null;
-  duration: number | null;
-  thumbnailUrl: string | null;
-}
-
-export interface SocialPost {
-  id: string;
-  userId: string;
-  content: string | null;
-  imageUrls: string[];
-  postType: string;
-  workoutData: any;
-  isPublic: boolean;
-  createdAt: string;
-  user: {
-    id: string;
-    name: string;
-    username: string;
-    avatarUrl: string | null;
-    level: number;
-  };
-  media: PostMedia[];
-  reactionsCount: number;
-  myReaction: string | null;
-  _count: { comments: number };
-}
- 
-export interface SocialComment {
-  id: string;
-  content: string;
-  createdAt: string;
-  user: {
-    id: string;
-    name: string;
-    username: string;
-    avatarUrl: string | null;
-  };
-  replies?: SocialComment[];
-}
- 
 export interface ChallengeData {
   id: string;
   title: string;
@@ -596,40 +551,6 @@ export const aiAPI = {
 };
 
 export const socialAPI = {
-  // Feed
-  getFeed: (cursor?: string) =>
-    api.get(`/api/social/feed${cursor ? `?cursor=${cursor}` : ""}`),
- 
-  // Posts
-  createPost: (data: {
-    content?: string;
-    imageUrls?: string[];
-    postType?: string;
-    workoutData?: any;
-    media?: Array<{
-      publicId: string;
-      url: string;
-      type: "IMAGE" | "VIDEO";
-      width?: number;
-      height?: number;
-      bytes?: number;
-      duration?: number;
-      thumbnailUrl?: string;
-    }>;
-  }) => api.post("/api/social/posts", data),
-
-  deletePost: (postId: string) => api.delete(`/api/social/posts/${postId}`),
- 
-  // Reactions
-  react: (postId: string, type: string) =>
-    api.post("/api/social/react", { postId, type }),
- 
-  // Comments
-  getComments: (postId: string) =>
-    api.get(`/api/social/comments/${postId}`),
-  addComment: (postId: string, content: string, parentId?: string) =>
-    api.post("/api/social/comments", { postId, content, parentId }),
- 
   // Follows
   follow: (targetUserId: string) =>
     api.post("/api/social/follow", { targetUserId }),
@@ -835,12 +756,6 @@ export interface ProfileHistoryResponse {
   totalPages: number;
 }
 
-export interface ProfilePostsResponse {
-  posts: SocialPost[];
-  nextCursor: string | null;
-  hasMore: boolean;
-}
-
 export interface ProfileBadgesResponse {
   badges: Array<{
     id: string;
@@ -1026,11 +941,6 @@ export const profileAPI = {
 
   getChart: (userId: string, type: string, period?: string) =>
     api.get<ProfileChartData>(`/api/profile/${userId}/charts/${type}${period ? `?period=${period}` : ""}`),
-
-  getPosts: (userId: string, cursor?: string, limit?: number) =>
-    api.get<ProfilePostsResponse>(
-      `/api/profile/${userId}/posts?${cursor ? `cursor=${cursor}&` : ""}${limit ? `limit=${limit}` : ""}`
-    ),
 
   getHistory: (userId: string, page?: number, limit?: number) =>
     api.get<ProfileHistoryResponse>(

@@ -9,10 +9,8 @@ import {
   type ProfileExpandedStats,
   type ProfileChartData,
   type ProfileHistoryItem,
-  type ProfilePostsResponse,
   type ProfileBadgesResponse,
   type CompareResponse,
-  type SocialPost,
   type NutritionHistoryItem,
   type StepsHistoryItem,
 } from "@/lib/api"
@@ -86,49 +84,6 @@ export function useProfileChart(userId: string | null, type: string, period: str
   useEffect(() => { fetch() }, [fetch])
 
   return { data, loading, refetch: fetch }
-}
-
-// ─── Hook: Profile Posts (cursor-based) ──────────────
-export function useProfilePosts(userId: string | null) {
-  const [posts, setPosts] = useState<SocialPost[]>([])
-  const [loading, setLoading] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [hasMore, setHasMore] = useState(false)
-  const cursorRef = useRef<string | null>(null)
-
-  const fetch = useCallback(async () => {
-    if (!userId) return
-    try {
-      setLoading(true)
-      const res = await profileAPI.getPosts(userId)
-      setPosts(res.data.posts)
-      cursorRef.current = res.data.nextCursor
-      setHasMore(res.data.hasMore)
-    } catch (err) {
-      console.error("Profile posts error:", err)
-    } finally {
-      setLoading(false)
-    }
-  }, [userId])
-
-  const fetchMore = useCallback(async () => {
-    if (!userId || !cursorRef.current || loadingMore) return
-    try {
-      setLoadingMore(true)
-      const res = await profileAPI.getPosts(userId, cursorRef.current)
-      setPosts(prev => [...prev, ...res.data.posts])
-      cursorRef.current = res.data.nextCursor
-      setHasMore(res.data.hasMore)
-    } catch (err) {
-      console.error("Profile posts load more error:", err)
-    } finally {
-      setLoadingMore(false)
-    }
-  }, [userId, loadingMore])
-
-  useEffect(() => { fetch() }, [fetch])
-
-  return { posts, loading, loadingMore, hasMore, refetch: fetch, fetchMore }
 }
 
 // ─── Hook: Workout History (offset-based) ────────────

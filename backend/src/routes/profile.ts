@@ -143,8 +143,6 @@ router.get("/:userId/stats", async (req: Request, res: Response) => {
       stepsAgg,
       nutritionAgg,
       foodLogCount,
-      totalPosts,
-      reactionsReceived,
       challengesCompleted,
       challengesWon,
       badgesEarned,
@@ -161,8 +159,6 @@ router.get("/:userId/stats", async (req: Request, res: Response) => {
       prisma.dailySteps.aggregate({ where: { userId: targetId }, _sum: { steps: true, distanceKm: true }, _avg: { steps: true, activeMinutes: true }, _max: { steps: true } }),
       prisma.foodLog.aggregate({ where: { userId: targetId }, _avg: { totalCalories: true, totalProtein: true, totalCarbs: true, totalFat: true, waterMl: true } }),
       prisma.foodLog.count({ where: { userId: targetId } }),
-      prisma.post.count({ where: { userId: targetId } }),
-      prisma.reaction.count({ where: { post: { userId: targetId } } }),
       prisma.challengeParticipant.count({ where: { userId: targetId, challenge: { status: "COMPLETED" } } }),
       prisma.challengeParticipant.count({ where: { userId: targetId, isWinner: true } }),
       prisma.userBadge.count({ where: { userId: targetId } }),
@@ -286,8 +282,6 @@ router.get("/:userId/stats", async (req: Request, res: Response) => {
         bestStreak: Math.max(user.bestStreak, streak),
         badgesEarned,
         badgesTotal: totalBadges,
-        totalPosts,
-        reactionsReceived,
         challengesCompleted,
         challengesWon,
       },
@@ -466,41 +460,6 @@ router.get("/:userId/charts/:type", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Charts error:", error)
     res.status(500).json({ error: "Error al obtener datos de gráfico" })
-  }
-})
-
-// ═══════════════════════════════════════════════════════
-// GET /api/profile/:userId/posts?cursor=X&limit=12
-// ═══════════════════════════════════════════════════════
-router.get("/:userId/posts", async (req: Request, res: Response) => {
-  try {
-    const userId = req.params.userId as string
-    const cursor = req.query.cursor as string | undefined
-    const limit = Math.min(parseInt(req.query.limit as string) || 12, 30)
-
-    const authUser = await getAuthUser(req)
-    const isOwn = authUser?.id === userId
-
-    const posts = await prisma.post.findMany({
-      where: { userId, ...(isOwn ? {} : { isPublic: true }) },
-      include: {
-        user: { select: { id: true, name: true, username: true, avatarUrl: true, level: true } },
-        media: { select: { id: true, url: true, type: true, width: true, height: true, duration: true, thumbnailUrl: true } },
-        _count: { select: { comments: true, reactions: true } },
-      },
-      orderBy: { createdAt: "desc" },
-      take: limit + 1,
-      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-    })
-
-    const hasMore = posts.length > limit
-    const items = hasMore ? posts.slice(0, limit) : posts
-    const nextCursor = hasMore ? items[items.length - 1].id : null
-
-    res.json({ posts: items, nextCursor, hasMore })
-  } catch (error) {
-    console.error("Profile posts error:", error)
-    res.status(500).json({ error: "Error al obtener posts" })
   }
 })
 

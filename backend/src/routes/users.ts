@@ -7,7 +7,6 @@ import { prisma } from "../lib/prisma.js"
 import { requireAuth } from "../middleware/auth.js"
 import { strictLimiter } from "../middleware/rateLimit.js"
 import { getAuth } from "@clerk/express"
-import { isValidCloudinaryUrl, deleteCloudinaryResource } from "../lib/cloudinary.js"
 import { calculateLevel, calculateStreak, updateBestStreak } from "../lib/userHelpers.js"
 
 const router = Router()
@@ -112,12 +111,11 @@ router.put("/me", async (req: Request, res: Response) => {
     }
 
     // Solo permitir actualizar campos seguros
+    // avatarUrl viene de Clerk (webhook user.updated) — no se modifica directamente desde la app
     const allowedFields = [
       "name",
       "username",
       "bio",
-      "avatarUrl",
-      "avatarPublicId",
       "weight",
       "height",
       "bodyFat",
@@ -140,18 +138,6 @@ router.put("/me", async (req: Request, res: Response) => {
         res.status(400).json({ error: "Username solo puede tener letras minúsculas, números, puntos y guiones bajos" }); return
       }
       updateData.username = uname
-    }
-
-    // Validate avatar URL if provided
-    if (updateData.avatarUrl && !isValidCloudinaryUrl(updateData.avatarUrl)) {
-      res.status(400).json({ error: "URL de avatar inválida" }); return
-    }
-
-    // Delete old avatar from Cloudinary if replacing
-    if (updateData.avatarPublicId && user.avatarPublicId && user.avatarPublicId !== updateData.avatarPublicId) {
-      deleteCloudinaryResource(user.avatarPublicId).catch((err: unknown) =>
-        console.error("[Cloudinary cleanup failed]", err)
-      )
     }
 
     const updatedUser = await prisma.user.update({
