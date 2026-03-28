@@ -400,8 +400,10 @@ router.delete("/templates/:id", async (req: Request, res: Response) => {
       return
     }
 
+    const templateId = req.params.id as string
+
     const template = await prisma.workoutTemplate.findUnique({
-      where: { id: req.params.id },
+      where: { id: templateId },
     })
 
     if (!template) {
@@ -414,7 +416,7 @@ router.delete("/templates/:id", async (req: Request, res: Response) => {
       return
     }
 
-    await prisma.workoutTemplate.delete({ where: { id: req.params.id } })
+    await prisma.workoutTemplate.delete({ where: { id: templateId } })
     res.json({ success: true })
   } catch (error) {
     res.status(500).json({ error: "Error al eliminar plantilla" })
@@ -490,7 +492,8 @@ router.get("/recent-exercises", async (req: Request, res: Response) => {
       return
     }
 
-    const limit = Math.min(parseInt(req.query.limit as string) || 10, 20)
+    const limitRaw = Array.isArray(req.query.limit) ? req.query.limit[0] : req.query.limit
+    const limit = Math.min(parseInt(limitRaw as string) || 10, 20)
 
     // Traer los sets más recientes y deduplicar por externalId en JS
     const recentSets = await prisma.workoutSet.findMany({
@@ -539,7 +542,8 @@ router.get("/frequent-exercises", async (req: Request, res: Response) => {
       return
     }
 
-    const limit = Math.min(parseInt(req.query.limit as string) || 10, 20)
+    const limitRaw = Array.isArray(req.query.limit) ? req.query.limit[0] : req.query.limit
+    const limit = Math.min(parseInt(limitRaw as string) || 10, 20)
 
     const grouped = await prisma.workoutSet.groupBy({
       by: ["externalId", "exerciseName"],
