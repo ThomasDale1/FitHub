@@ -399,8 +399,10 @@ export interface WeekDayData {
 export const exerciseAPI = {
   getBodyParts: () => api.get<string[]>("/api/exercises/bodyparts"),
 
-  getByBodyPart: (bodyPart: string) =>
-    api.get<Exercise[]>(`/api/exercises/bodypart/${bodyPart}`),
+  getByBodyPart: (bodyPart: string, limit = 20, offset = 0) =>
+    api.get<Exercise[]>(
+      `/api/exercises/bodypart/${bodyPart}?limit=${limit}&offset=${offset}`
+    ),
 
   search: (name: string) =>
     api.get<Exercise[]>(`/api/exercises/search?name=${name}`),
@@ -451,6 +453,67 @@ export const userAPI = {
 };
 
 // ─── Workout API ──────────────────────────────────────
+// ─── Types para la Workout Tab ────────────────────────
+export interface RecentExercise {
+  externalId: string | null;
+  exerciseName: string;
+  customExerciseId: string | null;
+  weight: number | null;
+  reps: number | null;
+  workout: { endTime: string | null };
+}
+
+export interface FrequentExercise {
+  externalId: string | null;
+  exerciseName: string;
+  count: number;
+}
+
+export interface LastWorkoutExercise {
+  externalId: string | null;
+  exerciseName: string;
+  customExerciseId: string | null;
+  order: number;
+  sets: {
+    id: string;
+    weight: number | null;
+    reps: number | null;
+    setNumber: number;
+    isCompleted: boolean;
+  }[];
+}
+
+export interface LastWorkout {
+  id: string;
+  name: string;
+  duration: number | null;
+  endTime: string | null;
+  totalVolume: number;
+  exercises: LastWorkoutExercise[];
+}
+
+export interface WorkoutTemplate {
+  id: string;
+  name: string;
+  description: string | null;
+  isPublic: boolean;
+  timesUsed: number;
+  createdAt: string;
+  updatedAt: string;
+  templateSets: {
+    id: string;
+    order: number;
+    externalId: string | null;
+    exerciseName: string;
+    customExerciseId: string | null;
+    targetSets: number;
+    targetReps: number | null;
+    targetWeight: number | null;
+    restSeconds: number;
+    notes: string | null;
+  }[];
+}
+
 export const workoutAPI = {
   getAll: () => api.get("/api/workouts"),
 
@@ -463,10 +526,30 @@ export const workoutAPI = {
   finish: (workoutId: string, durationMinutes?: number) =>
     api.post(`/api/workouts/${workoutId}/finish`, durationMinutes ? { durationMinutes } : {}),
 
-  getTemplates: () => api.get("/api/workouts/templates"),
+  getLast: () => api.get<LastWorkout | null>("/api/workouts/last"),
 
-  createTemplate: (data: any) =>
-    api.post("/api/workouts/templates", data),
+  getRecentExercises: (limit = 10) =>
+    api.get<RecentExercise[]>(`/api/workouts/recent-exercises?limit=${limit}`),
+
+  getFrequentExercises: (limit = 10) =>
+    api.get<FrequentExercise[]>(`/api/workouts/frequent-exercises?limit=${limit}`),
+
+  getTemplates: () => api.get<WorkoutTemplate[]>("/api/workouts/templates"),
+
+  createTemplate: (data: {
+    name: string;
+    description?: string;
+    exercises: {
+      externalId?: string;
+      exerciseName: string;
+      targetSets?: number;
+      targetReps?: number;
+      restSeconds?: number;
+    }[];
+  }) => api.post<WorkoutTemplate>("/api/workouts/templates", data),
+
+  deleteTemplate: (id: string) =>
+    api.delete(`/api/workouts/templates/${id}`),
 
   getPRs: () => api.get("/api/workouts/prs"),
 };

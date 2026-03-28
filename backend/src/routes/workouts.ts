@@ -390,6 +390,179 @@ router.post("/templates", async (req: Request, res: Response) => {
   }
 })
 
+// ─── DELETE /api/workouts/templates/:id ──────────────
+router.delete("/templates/:id", async (req: Request, res: Response) => {
+  try {
+    const { userId: clerkId } = getAuth(req)
+    const userId = await getPrismaUserId(clerkId!)
+    if (!userId) {
+      res.status(404).json({ error: "Usuario no encontrado" })
+      return
+    }
+
+    const template = await prisma.workoutTemplate.findUnique({
+      where: { id: req.params.id },
+    })
+
+    if (!template) {
+      res.status(404).json({ error: "Plantilla no encontrada" })
+      return
+    }
+
+    if (template.userId !== userId) {
+      res.status(403).json({ error: "No tienes permiso para eliminar esta plantilla" })
+      return
+    }
+
+    await prisma.workoutTemplate.delete({ where: { id: req.params.id } })
+    res.json({ success: true })
+  } catch (error) {
+    res.status(500).json({ error: "Error al eliminar plantilla" })
+  }
+})
+
+// ─── GET /api/workouts/last ───────────────────────────
+// Último workout completado con sus ejercicios agrupados
+router.get("/last", async (req: Request, res: Response) => {
+  try {
+    const { userId: clerkId } = getAuth(req)
+    const userId = await getPrismaUserId(clerkId!)
+    if (!userId) {
+      res.status(404).json({ error: "Usuario no encontrado" })
+      return
+    }
+
+    const workout = await prisma.workout.findFirst({
+      where: { userId, isCompleted: true },
+      orderBy: { endTime: "desc" },
+      include: {
+        sets: {
+          where: { isCompleted: true },
+          orderBy: [{ order: "asc" }, { setNumber: "asc" }],
+        },
+      },
+    })
+
+    if (!workout) {
+      res.json(null)
+      return
+    }
+
+    // Agrupar sets por ejercicio para construir la lista de ejercicios del workout
+    const exerciseMap = new Map<string, {
+      externalId: string | null
+      exerciseName: string
+      customExerciseId: string | null
+      order: number
+      sets: typeof workout.sets
+    }>()
+
+    for (const set of workout.sets) {
+      const key = set.externalId ?? set.exerciseName
+      if (!exerciseMap.has(key)) {
+        exerciseMap.set(key, {
+          externalId: set.externalId,
+          exerciseName: set.exerciseName,
+          customExerciseId: set.customExerciseId,
+          order: set.order,
+          sets: [],
+        })
+      }
+      exerciseMap.get(key)!.sets.push(set)
+    }
+
+    const exercises = Array.from(exerciseMap.values()).sort((a, b) => a.order - b.order)
+
+    res.json({ ...workout, exercises })
+  } catch (error) {
+    res.status(500).json({ error: "Error al obtener último workout" })
+  }
+})
+
+// ─── GET /api/workouts/recent-exercises ───────────────
+// Últimos N ejercicios únicos usados por el usuario
+router.get("/recent-exercises", async (req: Request, res: Response) => {
+  try {
+    const { userId: clerkId } = getAuth(req)
+    const userId = await getPrismaUserId(clerkId!)
+    if (!userId) {
+      res.status(404).json({ error: "Usuario no encontrado" })
+      return
+    }
+
+    const limit = Math.min(parseInt(req.query.limit as string) || 10, 20)
+
+    // Traer los sets más recientes y deduplicar por externalId en JS
+    const recentSets = await prisma.workoutSet.findMany({
+      where: {
+        workout: { userId, isCompleted: true },
+        isCompleted: true,
+      },
+      orderBy: { workout: { endTime: "desc" } },
+      select: {
+        externalId: true,
+        exerciseName: true,
+        customExerciseId: true,
+        weight: true,
+        reps: true,
+        workout: { select: { endTime: true } },
+      },
+      take: 200, // Margen suficiente para encontrar N únicos
+    })
+
+    const seen = new Set<string>()
+    const unique: typeof recentSets = []
+
+    for (const set of recentSets) {
+      const key = set.externalId ?? set.exerciseName
+      if (!seen.has(key)) {
+        seen.add(key)
+        unique.push(set)
+        if (unique.length >= limit) break
+      }
+    }
+
+    res.json(unique)
+  } catch (error) {
+    res.status(500).json({ error: "Error al obtener ejercicios recientes" })
+  }
+})
+
+// ─── GET /api/workouts/frequent-exercises ─────────────
+// Ejercicios más usados por el usuario (por conteo de sets)
+router.get("/frequent-exercises", async (req: Request, res: Response) => {
+  try {
+    const { userId: clerkId } = getAuth(req)
+    const userId = await getPrismaUserId(clerkId!)
+    if (!userId) {
+      res.status(404).json({ error: "Usuario no encontrado" })
+      return
+    }
+
+    const limit = Math.min(parseInt(req.query.limit as string) || 10, 20)
+
+    const grouped = await prisma.workoutSet.groupBy({
+      by: ["externalId", "exerciseName"],
+      where: {
+        workout: { userId, isCompleted: true },
+        isCompleted: true,
+        externalId: { not: null },
+      },
+      _count: { id: true },
+      orderBy: { _count: { id: "desc" } },
+      take: limit,
+    })
+
+    res.json(grouped.map((g) => ({
+      externalId: g.externalId,
+      exerciseName: g.exerciseName,
+      count: g._count.id,
+    })))
+  } catch (error) {
+    res.status(500).json({ error: "Error al obtener ejercicios frecuentes" })
+  }
+})
+
 // ─── GET /api/workouts/prs ────────────────────────────
 router.get("/prs", async (req: Request, res: Response) => {
   try {

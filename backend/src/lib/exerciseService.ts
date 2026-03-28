@@ -45,13 +45,15 @@ export const searchExercises = async (
   return response.data;
 };
 
-// Obtener ejercicios por parte del cuerpo
+// Obtener ejercicios por parte del cuerpo (con paginación)
 export const getExercisesByBodyPart = async (
-  bodyPart: string
+  bodyPart: string,
+  limit = 20,
+  offset = 0
 ): Promise<Exercise[]> => {
   const response = await axios.get(
     `${BASE_URL}/exercises/bodyPart/${bodyPart}`,
-    { headers, params: { limit: 50 } }
+    { headers, params: { limit, offset } }
   );
   return response.data;
 };
