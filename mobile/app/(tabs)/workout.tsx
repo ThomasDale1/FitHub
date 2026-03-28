@@ -110,22 +110,19 @@ export default function WorkoutScreen() {
 
   // ── Exercises ──────────────────────────────────────────────────────────────
   const [exercises, setExercises] = useState<Exercise[]>([]);
+  const [frequentList, setFrequentList] = useState<Exercise[]>([]);
+  const [recentList, setRecentList] = useState<Exercise[]>([]);
   const [bodyParts, setBodyParts] = useState<string[]>([]);
-  const [offset, setOffset] = useState(0);
-  const [hasMore, setHasMore] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   const [selectedBodyPart, setSelectedBodyPart] = useState("chest");
   const [selectedEquipment, setSelectedEquipment] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<SortOption>("alpha");
   const [activeDropdown, setActiveDropdown] = useState<"bodypart" | "equipment" | "sort" | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [frequentIds, setFrequentIds] = useState<string[]>([]);
-  const [recentIds, setRecentIds] = useState<string[]>([]);
   const [loadingParts, setLoadingParts] = useState(true);
   const [loadingFirst, setLoadingFirst] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [searching, setSearching] = useState(false);
-  const [searchOffset, setSearchOffset] = useState(0);
-  const [searchHasMore, setSearchHasMore] = useState(false);
 
   // ── Modal ──────────────────────────────────────────────────────────────────
   const [modalExercise, setModalExercise] = useState<Exercise | null>(null);
@@ -133,7 +130,6 @@ export default function WorkoutScreen() {
 
   // ── Refs ───────────────────────────────────────────────────────────────────
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const fetchingRef = useRef(false);
   const isSearchMode = searchQuery.length >= 2;
 
   // ── Tour ───────────────────────────────────────────────────────────────────
@@ -168,16 +164,14 @@ export default function WorkoutScreen() {
         }
         setPrsMap(map);
         setBodyParts(partsRes.data ?? []);
-        setFrequentIds(
-          (frequentRes.data ?? [])
-            .map((e: { externalId: string | null }) => e.externalId)
-            .filter(Boolean) as string[]
-        );
-        setRecentIds(
-          (recentIdsRes.data ?? [])
-            .map((e: { externalId: string | null }) => e.externalId)
-            .filter(Boolean) as string[]
-        );
+
+        const toExercise = (e: { externalId?: string | null; exerciseName: string }): Exercise => ({
+          id: e.externalId ?? e.exerciseName,
+          name: e.exerciseName,
+          bodyPart: "", target: "", equipment: "", instructions: [], secondaryMuscles: [],
+        });
+        setFrequentList((frequentRes.data ?? []).map(toExercise));
+        setRecentList((recentIdsRes.data ?? []).map(toExercise));
       } catch {
         // graceful
       } finally {
@@ -203,56 +197,50 @@ export default function WorkoutScreen() {
 
   useFocusEffect(useCallback(() => { loadTemplates(); }, [loadTemplates]));
 
-  // ── Ejercicios: primera página ─────────────────────────────────────────────
-  const fetchFirstPage = useCallback(async (bodyPart: string) => {
+  // ── Ejercicios: fetch desde ExerciseDB (alpha mode) ───────────────────────
+  const fetchFromApi = useCallback(async (page: number, bodyPart: string, equipment: string | null) => {
     setLoadingFirst(true);
     setExercises([]);
-    setOffset(0);
-    setHasMore(true);
-    fetchingRef.current = false;
     try {
-      const { data } = await exerciseAPI.getByBodyPart(bodyPart, PAGE_SIZE, 0);
+      const offset = (page - 1) * PAGE_SIZE;
+      const { data } = equipment
+        ? await exerciseAPI.getByEquipment(equipment, PAGE_SIZE, offset)
+        : await exerciseAPI.getByBodyPart(bodyPart, PAGE_SIZE, offset);
       const results = data ?? [];
       setExercises(results);
-      setOffset(results.length);
-      setHasMore(results.length === PAGE_SIZE);
+      setTotalPages((prev) => (results.length < PAGE_SIZE ? page : Math.max(prev, page + 1)));
     } catch {
       setExercises([]);
-      setHasMore(false);
     } finally {
       setLoadingFirst(false);
     }
   }, []);
 
+  // Cuando cambia bodyPart, equipment o sortBy → recargar desde página 1
   useEffect(() => {
-    if (!isSearchMode) fetchFirstPage(selectedBodyPart);
-  }, [selectedBodyPart]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (isSearchMode || sortBy !== "alpha") return;
+    setCurrentPage(1);
+    setTotalPages(1);
+    fetchFromApi(1, selectedBodyPart, selectedEquipment);
+  }, [selectedBodyPart, selectedEquipment, sortBy]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Ejercicios: páginas siguientes (lazy load) ─────────────────────────────
-  const fetchNextPage = useCallback(async () => {
-    if (fetchingRef.current || !hasMore || isSearchMode) return;
-    fetchingRef.current = true;
-    setLoadingMore(true);
-    try {
-      const { data } = await exerciseAPI.getByBodyPart(selectedBodyPart, PAGE_SIZE, offset);
-      const results = data ?? [];
-      if (results.length === 0) {
-        setHasMore(false);
-      } else {
-        setExercises((prev) => {
-          const existingIds = new Set(prev.map((e) => e.id));
-          return [...prev, ...results.filter((e: Exercise) => !existingIds.has(e.id))];
-        });
-        setOffset((prev) => prev + results.length);
-        setHasMore(results.length === PAGE_SIZE);
-      }
-    } catch {
-      // no bloquear UX
-    } finally {
-      setLoadingMore(false);
-      fetchingRef.current = false;
+  const goToPage = useCallback((page: number) => {
+    setCurrentPage(page);
+    if (isSearchMode) {
+      setSearching(true);
+      const offset = (page - 1) * PAGE_SIZE;
+      exerciseAPI.search(searchQuery, PAGE_SIZE, offset)
+        .then(({ data }) => {
+          const results = data ?? [];
+          setExercises(results);
+          setTotalPages((prev) => (results.length < PAGE_SIZE ? page : Math.max(prev, page + 1)));
+        })
+        .catch(() => setExercises([]))
+        .finally(() => setSearching(false));
+    } else {
+      fetchFromApi(page, selectedBodyPart, selectedEquipment);
     }
-  }, [hasMore, isSearchMode, selectedBodyPart, offset]);
+  }, [isSearchMode, searchQuery, selectedBodyPart, selectedEquipment, fetchFromApi]);
 
   // ── Búsqueda con debounce ──────────────────────────────────────────────────
   const handleSearch = useCallback(
@@ -260,20 +248,21 @@ export default function WorkoutScreen() {
       setSearchQuery(text);
       if (searchTimeout.current) clearTimeout(searchTimeout.current);
       if (!text) {
-        fetchFirstPage(selectedBodyPart);
+        setCurrentPage(1);
+        setTotalPages(1);
+        fetchFromApi(1, selectedBodyPart, selectedEquipment);
         return;
       }
       if (text.length < 2) return;
       setSearching(true);
-      setSearchOffset(0);
-      setSearchHasMore(false);
+      setCurrentPage(1);
+      setTotalPages(1);
       searchTimeout.current = setTimeout(async () => {
         try {
           const { data } = await exerciseAPI.search(text, PAGE_SIZE, 0);
           const results = data ?? [];
           setExercises(results);
-          setSearchOffset(results.length);
-          setSearchHasMore(results.length === PAGE_SIZE);
+          setTotalPages(results.length < PAGE_SIZE ? 1 : 2);
         } catch {
           setExercises([]);
         } finally {
@@ -281,55 +270,16 @@ export default function WorkoutScreen() {
         }
       }, 300);
     },
-    [selectedBodyPart, fetchFirstPage]
+    [selectedBodyPart, selectedEquipment, fetchFromApi]
   );
 
-  // ── Búsqueda: páginas siguientes ───────────────────────────────────────────
-  const fetchNextSearchPage = useCallback(async () => {
-    if (fetchingRef.current || !searchHasMore || !isSearchMode) return;
-    fetchingRef.current = true;
-    setLoadingMore(true);
-    try {
-      const { data } = await exerciseAPI.search(searchQuery, PAGE_SIZE, searchOffset);
-      const results = data ?? [];
-      if (results.length === 0) {
-        setSearchHasMore(false);
-      } else {
-        setExercises((prev) => [...prev, ...results]);
-        setSearchOffset((prev) => prev + results.length);
-        setSearchHasMore(results.length === PAGE_SIZE);
-      }
-    } catch {
-      setSearchHasMore(false);
-    } finally {
-      setLoadingMore(false);
-      fetchingRef.current = false;
-    }
-  }, [searchHasMore, isSearchMode, searchQuery, searchOffset]);
-
-  // ── Ejercicios filtrados y ordenados ───────────────────────────────────────
+  // ── Ejercicios a mostrar según modo ───────────────────────────────────────
   const displayedExercises = useMemo(() => {
-    let list = exercises;
-    if (selectedEquipment) {
-      list = list.filter((e) =>
-        e.equipment.toLowerCase().includes(selectedEquipment.toLowerCase())
-      );
-    }
-    if (sortBy === "alpha") {
-      list = [...list].sort((a, b) => a.name.localeCompare(b.name));
-    } else if (sortBy === "frequent") {
-      const order = new Map(frequentIds.map((id, i) => [id, i]));
-      list = [...list].sort(
-        (a, b) => (order.get(a.id) ?? 9999) - (order.get(b.id) ?? 9999)
-      );
-    } else if (sortBy === "recent") {
-      const order = new Map(recentIds.map((id, i) => [id, i]));
-      list = [...list].sort(
-        (a, b) => (order.get(a.id) ?? 9999) - (order.get(b.id) ?? 9999)
-      );
-    }
-    return list;
-  }, [exercises, selectedEquipment, sortBy, frequentIds, recentIds]);
+    if (sortBy === "frequent") return frequentList;
+    if (sortBy === "recent") return recentList;
+    // alpha mode: sort alphabetically
+    return [...exercises].sort((a, b) => a.name.localeCompare(b.name));
+  }, [exercises, sortBy, frequentList, recentList]);
 
   // ── Acciones: workout ──────────────────────────────────────────────────────
   const handleStartEmpty = useCallback(() => {
@@ -927,8 +877,8 @@ export default function WorkoutScreen() {
       {/* ── Fila de botones dropdown ─────────────────────────────────────── */}
       <View style={{ flexDirection: "row", gap: 8, marginBottom: 8 }}>
 
-        {/* Grupo muscular (oculto en modo búsqueda) */}
-        {!isSearchMode && (
+        {/* Grupo muscular (oculto en modo búsqueda o frecuente/reciente) */}
+        {!isSearchMode && sortBy === "alpha" && (
           <TouchableOpacity
             onPress={() =>
               setActiveDropdown(activeDropdown === "bodypart" ? null : "bodypart")
@@ -980,58 +930,60 @@ export default function WorkoutScreen() {
           </TouchableOpacity>
         )}
 
-        {/* Equipo */}
-        <TouchableOpacity
-          onPress={() =>
-            setActiveDropdown(activeDropdown === "equipment" ? null : "equipment")
-          }
-          style={{
-            flex: 1,
-            flexDirection: "row",
-            alignItems: "center",
-            gap: 4,
-            backgroundColor:
-              activeDropdown === "equipment"
-                ? "#6C63FF25"
-                : selectedEquipment
-                ? "#6C63FF15"
-                : "#1a1a2e",
-            borderWidth: 1,
-            borderColor:
-              activeDropdown === "equipment" || selectedEquipment
-                ? "#6C63FF"
-                : "#252540",
-            borderRadius: 12,
-            paddingHorizontal: 10,
-            paddingVertical: 9,
-          }}
-        >
-          <Text
+        {/* Equipo (oculto en modo frecuente/reciente) */}
+        {sortBy === "alpha" && (
+          <TouchableOpacity
+            onPress={() =>
+              setActiveDropdown(activeDropdown === "equipment" ? null : "equipment")
+            }
             style={{
               flex: 1,
-              color:
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 4,
+              backgroundColor:
+                activeDropdown === "equipment"
+                  ? "#6C63FF25"
+                  : selectedEquipment
+                  ? "#6C63FF15"
+                  : "#1a1a2e",
+              borderWidth: 1,
+              borderColor:
                 activeDropdown === "equipment" || selectedEquipment
                   ? "#6C63FF"
-                  : "#8888a0",
-              fontSize: 12,
-              fontWeight: "600",
+                  : "#252540",
+              borderRadius: 12,
+              paddingHorizontal: 10,
+              paddingVertical: 9,
             }}
-            numberOfLines={1}
           >
-            {selectedEquipment
-              ? EQUIPMENT_FILTERS.find((e) => e.key === selectedEquipment)?.label ?? "Equipo"
-              : "Equipo"}
-          </Text>
-          <Ionicons
-            name={activeDropdown === "equipment" ? "chevron-up" : "chevron-down"}
-            size={13}
-            color={
-              activeDropdown === "equipment" || selectedEquipment
-                ? "#6C63FF"
-                : "#6B6B80"
-            }
-          />
-        </TouchableOpacity>
+            <Text
+              style={{
+                flex: 1,
+                color:
+                  activeDropdown === "equipment" || selectedEquipment
+                    ? "#6C63FF"
+                    : "#8888a0",
+                fontSize: 12,
+                fontWeight: "600",
+              }}
+              numberOfLines={1}
+            >
+              {selectedEquipment
+                ? EQUIPMENT_FILTERS.find((e) => e.key === selectedEquipment)?.label ?? "Equipo"
+                : "Equipo"}
+            </Text>
+            <Ionicons
+              name={activeDropdown === "equipment" ? "chevron-up" : "chevron-down"}
+              size={13}
+              color={
+                activeDropdown === "equipment" || selectedEquipment
+                  ? "#6C63FF"
+                  : "#6B6B80"
+              }
+            />
+          </TouchableOpacity>
+        )}
 
         {/* Orden */}
         <TouchableOpacity
@@ -1096,7 +1048,7 @@ export default function WorkoutScreen() {
       >
         {displayedExercises.length} ejercicio
         {displayedExercises.length !== 1 ? "s" : ""}
-        {isSearchMode ? (searchHasMore ? "+" : "") : (hasMore ? "+" : "")}
+        {totalPages > 1 ? `  ·  Pág. ${currentPage}` : ""}
       </Text>
 
       {/* ── Panel de dropdown ────────────────────────────────────────────── */}
@@ -1159,7 +1111,7 @@ export default function WorkoutScreen() {
       )}
 
       {/* Dropdown: Equipo */}
-      {activeDropdown === "equipment" && (
+      {activeDropdown === "equipment" && sortBy === "alpha" && (
         <View
           style={{
             backgroundColor: "#141428",
@@ -1327,37 +1279,86 @@ export default function WorkoutScreen() {
         windowSize={5}
         initialNumToRender={8}
         maxToRenderPerBatch={6}
-        onEndReachedThreshold={0.4}
-        onEndReached={() => {
-          if (isSearchMode) fetchNextSearchPage();
-          else fetchNextPage();
-        }}
         ListFooterComponent={
           loadingFirst ? (
-            <View
-              style={{
-                paddingVertical: 40,
-                alignItems: "center",
-              }}
-            >
+            <View style={{ paddingVertical: 40, alignItems: "center" }}>
               <ActivityIndicator size="large" color="#6C63FF" />
               <Text style={{ color: "#6B6B80", marginTop: 12 }}>
                 Cargando ejercicios...
               </Text>
             </View>
-          ) : loadingMore ? (
+          ) : (searching || loadingFirst) ? null : totalPages > 1 ? (
             <View
               style={{
-                paddingVertical: 20,
+                flexDirection: "row",
+                justifyContent: "center",
                 alignItems: "center",
+                gap: 6,
+                paddingVertical: 20,
+                flexWrap: "wrap",
               }}
             >
-              <ActivityIndicator color="#6C63FF" />
-              <Text
-                style={{ color: "#6B6B80", fontSize: 12, marginTop: 6 }}
+              {/* Botón anterior */}
+              <TouchableOpacity
+                onPress={() => goToPage(currentPage - 1)}
+                disabled={currentPage === 1}
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 10,
+                  backgroundColor: currentPage === 1 ? "#1a1a2e" : "#252540",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  opacity: currentPage === 1 ? 0.4 : 1,
+                }}
               >
-                Cargando más ejercicios...
-              </Text>
+                <Ionicons name="chevron-back" size={16} color="#fff" />
+              </TouchableOpacity>
+
+              {/* Números de página */}
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                <TouchableOpacity
+                  key={page}
+                  onPress={() => goToPage(page)}
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 10,
+                    backgroundColor: page === currentPage ? "#6C63FF" : "#1a1a2e",
+                    borderWidth: 1,
+                    borderColor: page === currentPage ? "#6C63FF" : "#252540",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: page === currentPage ? "#fff" : "#8888a0",
+                      fontSize: 13,
+                      fontWeight: page === currentPage ? "700" : "500",
+                    }}
+                  >
+                    {page}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+
+              {/* Botón siguiente */}
+              <TouchableOpacity
+                onPress={() => goToPage(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 10,
+                  backgroundColor: currentPage === totalPages ? "#1a1a2e" : "#252540",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  opacity: currentPage === totalPages ? 0.4 : 1,
+                }}
+              >
+                <Ionicons name="chevron-forward" size={16} color="#fff" />
+              </TouchableOpacity>
             </View>
           ) : null
         }

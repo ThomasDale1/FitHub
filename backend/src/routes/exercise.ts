@@ -3,6 +3,7 @@ import {
   getExercises,
   searchExercises,
   getExercisesByBodyPart,
+  getExercisesByEquipment,
   getBodyParts,
   getExerciseById,
   getExerciseImage,
@@ -38,6 +39,19 @@ router.get("/bodyparts", async (req: Request, res: Response) => {
     res.json(bodyParts);
   } catch (error) {
     res.status(500).json({ error: "Error al obtener partes del cuerpo" });
+  }
+});
+
+// GET /api/exercises/equipment/:equipment?limit=20&offset=0
+router.get("/equipment/:equipment", async (req: Request, res: Response) => {
+  try {
+    const equipment = req.params.equipment as string;
+    const limit = Math.min(Number(getQueryString(req.query.limit)) || 20, 100);
+    const offset = Number(getQueryString(req.query.offset)) || 0;
+    const exercises = await getExercisesByEquipment(equipment, limit, offset);
+    res.json(exercises);
+  } catch (error) {
+    res.status(500).json({ error: "Error al obtener ejercicios" });
   }
 });
 

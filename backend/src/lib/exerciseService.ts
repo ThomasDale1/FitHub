@@ -47,6 +47,19 @@ export const searchExercises = async (
   return response.data;
 };
 
+// Obtener ejercicios por equipamiento (con paginación)
+export const getExercisesByEquipment = async (
+  equipment: string,
+  limit = 20,
+  offset = 0
+): Promise<Exercise[]> => {
+  const response = await axios.get(
+    `${BASE_URL}/exercises/equipment/${encodeURIComponent(equipment)}`,
+    { headers, params: { limit, offset } }
+  );
+  return response.data;
+};
+
 // Obtener ejercicios por parte del cuerpo (con paginación)
 export const getExercisesByBodyPart = async (
   bodyPart: string,
