@@ -209,7 +209,8 @@ export default function WorkoutScreen() {
       const results = data ?? [];
       setExercises(results);
       setTotalPages((prev) => (results.length < PAGE_SIZE ? page : Math.max(prev, page + 1)));
-    } catch {
+    } catch (err) {
+      console.error("[fetchFromApi] error:", err);
       setExercises([]);
     } finally {
       setLoadingFirst(false);

@@ -95,7 +95,7 @@ export default function ExerciseDetailModal({
           {/* GIF centrado */}
           <View style={{ alignItems: "center", marginBottom: 20 }}>
             <Image
-              source={{ uri: exerciseAPI.getGifUrl(exercise.id, "400") }}
+              source={{ uri: exerciseAPI.getGifUrl(exercise.id, "180") }}
               style={{
                 width: 200,
                 height: 200,

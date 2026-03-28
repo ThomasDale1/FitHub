@@ -63,8 +63,11 @@ router.get("/bodypart/:bodyPart", async (req: Request, res: Response) => {
     const offset = Number(getQueryString(req.query.offset)) || 0;
     const exercises = await getExercisesByBodyPart(bodyPart, limit, offset);
     res.json(exercises);
-  } catch (error) {
-    res.status(500).json({ error: "Error al obtener ejercicios" });
+  } catch (error: any) {
+    const status = error?.response?.status;
+    const detail = error?.response?.data ?? error?.message;
+    console.error("[exercise/bodypart] RapidAPI error:", status, detail);
+    res.status(500).json({ error: "Error al obtener ejercicios", rapidStatus: status, detail });
   }
 });
 
