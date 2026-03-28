@@ -70,14 +70,6 @@ const SORT_OPTIONS = [
 
 type SortOption = "alpha" | "frequent" | "recent";
 
-const MUSCLE_GROUPS = [
-  { key: "chest", label: "Pecho", icon: "body-outline" },
-  { key: "back", label: "Espalda", icon: "accessibility-outline" },
-  { key: "upper legs", label: "Piernas", icon: "walk-outline" },
-  { key: "shoulders", label: "Hombros", icon: "person-outline" },
-  { key: "upper arms", label: "Brazos", icon: "barbell-outline" },
-  { key: "waist", label: "Abdomen", icon: "ellipse-outline" },
-];
 
 function timeAgo(dateStr: string | null): string {
   if (!dateStr) return "";
@@ -132,6 +124,8 @@ export default function WorkoutScreen() {
   const [loadingFirst, setLoadingFirst] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [searching, setSearching] = useState(false);
+  const [searchOffset, setSearchOffset] = useState(0);
+  const [searchHasMore, setSearchHasMore] = useState(false);
 
   // ── Modal ──────────────────────────────────────────────────────────────────
   const [modalExercise, setModalExercise] = useState<Exercise | null>(null);
@@ -271,11 +265,15 @@ export default function WorkoutScreen() {
       }
       if (text.length < 2) return;
       setSearching(true);
+      setSearchOffset(0);
+      setSearchHasMore(false);
       searchTimeout.current = setTimeout(async () => {
         try {
-          const { data } = await exerciseAPI.search(text);
-          setExercises(data ?? []);
-          setHasMore(false);
+          const { data } = await exerciseAPI.search(text, PAGE_SIZE, 0);
+          const results = data ?? [];
+          setExercises(results);
+          setSearchOffset(results.length);
+          setSearchHasMore(results.length === PAGE_SIZE);
         } catch {
           setExercises([]);
         } finally {
@@ -285,6 +283,29 @@ export default function WorkoutScreen() {
     },
     [selectedBodyPart, fetchFirstPage]
   );
+
+  // ── Búsqueda: páginas siguientes ───────────────────────────────────────────
+  const fetchNextSearchPage = useCallback(async () => {
+    if (fetchingRef.current || !searchHasMore || !isSearchMode) return;
+    fetchingRef.current = true;
+    setLoadingMore(true);
+    try {
+      const { data } = await exerciseAPI.search(searchQuery, PAGE_SIZE, searchOffset);
+      const results = data ?? [];
+      if (results.length === 0) {
+        setSearchHasMore(false);
+      } else {
+        setExercises((prev) => [...prev, ...results]);
+        setSearchOffset((prev) => prev + results.length);
+        setSearchHasMore(results.length === PAGE_SIZE);
+      }
+    } catch {
+      setSearchHasMore(false);
+    } finally {
+      setLoadingMore(false);
+      fetchingRef.current = false;
+    }
+  }, [searchHasMore, isSearchMode, searchQuery, searchOffset]);
 
   // ── Ejercicios filtrados y ordenados ───────────────────────────────────────
   const displayedExercises = useMemo(() => {
@@ -658,61 +679,6 @@ export default function WorkoutScreen() {
         </View>
       )}
 
-      {/* ── Quick start por grupo muscular ─────────────────────────────── */}
-      <View style={{ marginBottom: 24 }}>
-        <Text
-          style={{
-            color: "#6B6B80",
-            fontSize: 12,
-            fontWeight: "700",
-            textTransform: "uppercase",
-            letterSpacing: 0.8,
-            marginBottom: 10,
-          }}
-        >
-          Entrenar por grupo
-        </Text>
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-          {MUSCLE_GROUPS.map((group) => (
-            <TouchableOpacity
-              key={group.key}
-              onPress={() => {
-                setSelectedBodyPart(group.key);
-                setSearchQuery("");
-              }}
-              activeOpacity={0.75}
-              style={{
-                width: "31%",
-                backgroundColor:
-                  selectedBodyPart === group.key ? "#6C63FF20" : "#1a1a2e",
-                borderWidth: 1,
-                borderColor:
-                  selectedBodyPart === group.key ? "#6C63FF" : "#252540",
-                borderRadius: 16,
-                paddingVertical: 14,
-                alignItems: "center",
-                gap: 6,
-              }}
-            >
-              <Ionicons
-                name={group.icon as any}
-                size={22}
-                color="#6C63FF"
-              />
-              <Text
-                style={{
-                  color:
-                    selectedBodyPart === group.key ? "#6C63FF" : "#c0c0d0",
-                  fontSize: 12,
-                  fontWeight: "600",
-                }}
-              >
-                {group.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
 
       {/* ── Ejercicios recientes ─────────────────────────────────────────── */}
       {!loadingStart && recentExercises.length > 0 && (
@@ -1130,7 +1096,7 @@ export default function WorkoutScreen() {
       >
         {displayedExercises.length} ejercicio
         {displayedExercises.length !== 1 ? "s" : ""}
-        {!isSearchMode && hasMore ? "+" : ""}
+        {isSearchMode ? (searchHasMore ? "+" : "") : (hasMore ? "+" : "")}
       </Text>
 
       {/* ── Panel de dropdown ────────────────────────────────────────────── */}
@@ -1363,7 +1329,8 @@ export default function WorkoutScreen() {
         maxToRenderPerBatch={6}
         onEndReachedThreshold={0.4}
         onEndReached={() => {
-          if (!isSearchMode) fetchNextPage();
+          if (isSearchMode) fetchNextSearchPage();
+          else fetchNextPage();
         }}
         ListFooterComponent={
           loadingFirst ? (

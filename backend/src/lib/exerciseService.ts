@@ -36,11 +36,13 @@ export const getExercises = async (
 
 // Buscar ejercicios por nombre
 export const searchExercises = async (
-  name: string
+  name: string,
+  limit = 20,
+  offset = 0
 ): Promise<Exercise[]> => {
   const response = await axios.get(
     `${BASE_URL}/exercises/name/${encodeURIComponent(name.toLowerCase())}`,
-    { headers }
+    { headers, params: { limit, offset } }
   );
   return response.data;
 };

@@ -54,7 +54,7 @@ router.get("/bodypart/:bodyPart", async (req: Request, res: Response) => {
   }
 });
 
-// GET /api/exercises/search?name=bench
+// GET /api/exercises/search?name=bench&limit=20&offset=0
 router.get("/search", async (req: Request, res: Response) => {
   try {
     const name = getQueryString(req.query.name);
@@ -62,7 +62,9 @@ router.get("/search", async (req: Request, res: Response) => {
       res.status(400).json({ error: "El parámetro 'name' es requerido" });
       return;
     }
-    const exercises = await searchExercises(name);
+    const limit = Math.min(Number(getQueryString(req.query.limit)) || 20, 100);
+    const offset = Number(getQueryString(req.query.offset)) || 0;
+    const exercises = await searchExercises(name, limit, offset);
     res.json(exercises);
   } catch (error) {
     res.status(500).json({ error: "Error al buscar ejercicios" });

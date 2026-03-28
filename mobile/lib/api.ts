@@ -404,8 +404,8 @@ export const exerciseAPI = {
       `/api/exercises/bodypart/${bodyPart}?limit=${limit}&offset=${offset}`
     ),
 
-  search: (name: string) =>
-    api.get<Exercise[]>(`/api/exercises/search?name=${name}`),
+  search: (name: string, limit = 20, offset = 0) =>
+    api.get<Exercise[]>(`/api/exercises/search?name=${encodeURIComponent(name)}&limit=${limit}&offset=${offset}`),
 
   getById: (id: string) => api.get<Exercise>(`/api/exercises/${id}`),
 
