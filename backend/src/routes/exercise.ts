@@ -55,19 +55,21 @@ router.get("/equipment/:equipment", async (req: Request, res: Response) => {
   }
 });
 
-// GET /api/exercises/bodypart/:bodyPart?limit=20&offset=0
+// GET /api/exercises/bodypart/:bodyPart?limit=20&offset=0&equipment=barbell
+// bodyPart="all" significa sin filtro de parte del cuerpo
+// equipment es opcional; si se pasa, filtra por bodyPart AND equipment
 router.get("/bodypart/:bodyPart", async (req: Request, res: Response) => {
   try {
-    const bodyPart = req.params.bodyPart as string;
+    const rawBodyPart = req.params.bodyPart as string;
+    const bodyPart = rawBodyPart === "all" ? "" : rawBodyPart;
     const limit = Math.min(Number(getQueryString(req.query.limit)) || 20, 100);
     const offset = Number(getQueryString(req.query.offset)) || 0;
-    const exercises = await getExercisesByBodyPart(bodyPart, limit, offset);
+    const equipment = getQueryString(req.query.equipment) ?? null;
+    const exercises = await getExercisesByBodyPart(bodyPart, limit, offset, equipment);
     res.json(exercises);
   } catch (error: any) {
-    const status = error?.response?.status;
-    const detail = error?.response?.data ?? error?.message;
-    console.error("[exercise/bodypart] RapidAPI error:", status, detail);
-    res.status(500).json({ error: "Error al obtener ejercicios", rapidStatus: status, detail });
+    console.error("[exercise/bodypart] error:", error?.message);
+    res.status(500).json({ error: "Error al obtener ejercicios" });
   }
 });
 

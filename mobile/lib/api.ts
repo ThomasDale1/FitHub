@@ -399,9 +399,9 @@ export interface WeekDayData {
 export const exerciseAPI = {
   getBodyParts: () => api.get<string[]>("/api/exercises/bodyparts"),
 
-  getByBodyPart: (bodyPart: string, limit = 20, offset = 0) =>
+  getByBodyPart: (bodyPart: string, limit = 20, offset = 0, equipment?: string | null) =>
     api.get<Exercise[]>(
-      `/api/exercises/bodypart/${bodyPart}?limit=${limit}&offset=${offset}`
+      `/api/exercises/bodypart/${encodeURIComponent(bodyPart || "all")}?limit=${limit}&offset=${offset}${equipment ? `&equipment=${encodeURIComponent(equipment)}` : ""}`
     ),
 
   getByEquipment: (equipment: string, limit = 20, offset = 0) =>

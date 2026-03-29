@@ -41,6 +41,7 @@ import TemplatePreviewModal from "@/components/workout/TemplatePreviewModal";
 const PAGE_SIZE = 20;
 
 const BODY_PART_LABELS: Record<string, string> = {
+  "": "Todos",
   back: "Espalda",
   cardio: "Cardio",
   chest: "Pecho",
@@ -115,13 +116,13 @@ export default function WorkoutScreen() {
   const [bodyParts, setBodyParts] = useState<string[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [selectedBodyPart, setSelectedBodyPart] = useState("chest");
+  const [selectedBodyPart, setSelectedBodyPart] = useState("");
   const [selectedEquipment, setSelectedEquipment] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<SortOption>("alpha");
   const [activeDropdown, setActiveDropdown] = useState<"bodypart" | "equipment" | "sort" | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [loadingParts, setLoadingParts] = useState(true);
-  const [loadingFirst, setLoadingFirst] = useState(false);
+  const [loadingFirst, setLoadingFirst] = useState(true);
   const [searching, setSearching] = useState(false);
 
   // ── Modal ──────────────────────────────────────────────────────────────────
@@ -203,9 +204,8 @@ export default function WorkoutScreen() {
     setExercises([]);
     try {
       const offset = (page - 1) * PAGE_SIZE;
-      const { data } = equipment
-        ? await exerciseAPI.getByEquipment(equipment, PAGE_SIZE, offset)
-        : await exerciseAPI.getByBodyPart(bodyPart, PAGE_SIZE, offset);
+      // Usa siempre getByBodyPart — acepta bodyPart="" (todos) y equipment opcional
+      const { data } = await exerciseAPI.getByBodyPart(bodyPart, PAGE_SIZE, offset, equipment);
       const results = data ?? [];
       setExercises(results);
       setTotalPages((prev) => (results.length < PAGE_SIZE ? page : Math.max(prev, page + 1)));
@@ -892,12 +892,12 @@ export default function WorkoutScreen() {
               backgroundColor:
                 activeDropdown === "bodypart"
                   ? "#6C63FF25"
-                  : selectedBodyPart !== "chest"
+                  : selectedBodyPart
                   ? "#6C63FF15"
                   : "#1a1a2e",
               borderWidth: 1,
               borderColor:
-                activeDropdown === "bodypart" || selectedBodyPart !== "chest"
+                activeDropdown === "bodypart" || selectedBodyPart
                   ? "#6C63FF"
                   : "#252540",
               borderRadius: 12,
@@ -909,7 +909,7 @@ export default function WorkoutScreen() {
               style={{
                 flex: 1,
                 color:
-                  activeDropdown === "bodypart" || selectedBodyPart !== "chest"
+                  activeDropdown === "bodypart" || selectedBodyPart
                     ? "#6C63FF"
                     : "#8888a0",
                 fontSize: 12,
@@ -923,7 +923,7 @@ export default function WorkoutScreen() {
               name={activeDropdown === "bodypart" ? "chevron-up" : "chevron-down"}
               size={13}
               color={
-                activeDropdown === "bodypart" || selectedBodyPart !== "chest"
+                activeDropdown === "bodypart" || selectedBodyPart
                   ? "#6C63FF"
                   : "#6B6B80"
               }
@@ -1070,12 +1070,43 @@ export default function WorkoutScreen() {
             <ActivityIndicator color="#6C63FF" style={{ padding: 12 }} />
           ) : (
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 4 }}>
+              {/* Opción "Todos" — sin filtro de grupo muscular */}
+              <TouchableOpacity
+                onPress={() => {
+                  setSelectedBodyPart("");
+                  setActiveDropdown(null);
+                }}
+                style={{
+                  paddingHorizontal: 12,
+                  paddingVertical: 8,
+                  borderRadius: 10,
+                  backgroundColor: selectedBodyPart === "" ? "#6C63FF" : "#1a1a2e",
+                  borderWidth: 1,
+                  borderColor: selectedBodyPart === "" ? "#6C63FF" : "#252540",
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 6,
+                }}
+              >
+                {selectedBodyPart === "" && (
+                  <Ionicons name="checkmark" size={12} color="#fff" />
+                )}
+                <Text
+                  style={{
+                    fontSize: 13,
+                    fontWeight: selectedBodyPart === "" ? "700" : "500",
+                    color: selectedBodyPart === "" ? "#fff" : "#8888a0",
+                  }}
+                >
+                  Todos
+                </Text>
+              </TouchableOpacity>
+
               {bodyParts.map((part) => (
                 <TouchableOpacity
                   key={part}
                   onPress={() => {
                     setSelectedBodyPart(part);
-                    setSelectedEquipment(null);
                     setActiveDropdown(null);
                   }}
                   style={{

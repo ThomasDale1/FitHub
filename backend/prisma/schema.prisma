@@ -85,11 +85,32 @@ model User {
   @@map("users")
 }
 
+// ─── CATÁLOGO DE EJERCICIOS ──────────────────────────
+// 800+ ejercicios almacenados localmente (seed desde free-exercise-db).
+// Reemplaza la dependencia de ExerciseDB RapidAPI.
+model Exercise {
+  id               String   @id @default(cuid())
+  externalId       String?  @unique
+  name             String
+  bodyPart         String
+  target           String
+  equipment        String
+  instructions     String[]
+  secondaryMuscles String[]
+  gifUrl           String?
+  difficulty       String?
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+
+  @@index([bodyPart])
+  @@index([equipment])
+  @@index([bodyPart, equipment])
+  @@index([name])
+  @@map("exercises")
+}
+
 // ─── EJERCICIO PERSONALIZADO ──────────────────────────
-// ÚNICO modelo de ejercicio en nuestra DB.
-// Solo ejercicios creados por usuarios.
-// Los ejercicios de ExerciseDB se consultan
-// en tiempo real y NUNCA se almacenan aquí.
+// Ejercicios creados por los propios usuarios.
 model CustomExercise {
   id               String   @id @default(cuid())
   userId           String
