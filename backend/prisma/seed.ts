@@ -45,16 +45,19 @@ const FREE_DB_IMG =
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
-// Formato Kaggle ExerciseDB v2
-interface KaggleRow {
-  exerciseId: string;
+// Formato normalizado unificado (exercises-data.json post-normalización)
+interface NormalizedRow {
+  id: string;
   name: string;
-  gifUrl: string;             // nombre de archivo: "2ORFMoR.gif"
-  targetMuscles: string[];
+  gif: string | null;         // nombre de archivo: "2ORFMoR.gif" o null
+  targetedMuscles: string[];
   bodyParts: string[];
-  equipments: string[];
+  equipment: string;
   secondaryMuscles: string[];
   instructions: string[];
+  level?: string;
+  mechanic?: string | null;
+  category?: string;
 }
 
 // Formato free-exercise-db (yuhonas)
@@ -134,8 +137,8 @@ async function main() {
 
   // ── Ruta A: dataset Kaggle ────────────────────────────────────────────────
   if (hasLocalJson) {
-    const exercises: KaggleRow[] = JSON.parse(readFileSync(LOCAL_JSON, "utf-8"));
-    console.log(`Kaggle ExerciseDB: ${exercises.length} ejercicios encontrados.`);
+    const exercises: NormalizedRow[] = JSON.parse(readFileSync(LOCAL_JSON, "utf-8"));
+    console.log(`Dataset normalizado: ${exercises.length} ejercicios encontrados.`);
 
     if (hasGifs) {
       console.log(`Carpeta gifs/ encontrada → subiendo a Cloudinary...`);
@@ -148,35 +151,36 @@ async function main() {
     let errors = 0;
 
     for (const e of exercises) {
-      const exerciseId = e.exerciseId;
-      const gifFileName = e.gifUrl; // "2ORFMoR.gif"
-      const gifId = gifFileName.replace(".gif", "");
+      const exerciseId = e.id;
+      const gifId = e.gif ? e.gif.replace(".gif", "") : null;
 
-      // Subir GIF a Cloudinary si la carpeta existe
-      const gifUrl = hasGifs ? await uploadGif(gifId) : null;
+      // Subir GIF a Cloudinary si la carpeta existe y el ejercicio tiene gif
+      const gifUrl = (hasGifs && gifId) ? await uploadGif(gifId) : null;
 
       try {
         await prisma.exercise.upsert({
           where: { externalId: exerciseId },
           update: {
             name: e.name,
-            bodyPart: e.bodyParts[0] ?? "other",
-            target: e.targetMuscles[0] ?? "other",
-            equipment: e.equipments[0] ?? "other",
+            bodyPart: e.bodyParts[0] ?? "otro",
+            target: e.targetedMuscles[0] ?? "otro",
+            equipment: e.equipment ?? "otro",
             gifUrl,
             instructions: cleanInstructions(e.instructions ?? []),
             secondaryMuscles: e.secondaryMuscles ?? [],
+            difficulty: e.level ?? null,
             isActive: true,
           },
           create: {
             externalId: exerciseId,
             name: e.name,
-            bodyPart: e.bodyParts[0] ?? "other",
-            target: e.targetMuscles[0] ?? "other",
-            equipment: e.equipments[0] ?? "other",
+            bodyPart: e.bodyParts[0] ?? "otro",
+            target: e.targetedMuscles[0] ?? "otro",
+            equipment: e.equipment ?? "otro",
             gifUrl,
             instructions: cleanInstructions(e.instructions ?? []),
             secondaryMuscles: e.secondaryMuscles ?? [],
+            difficulty: e.level ?? null,
             isActive: true,
           },
         });
