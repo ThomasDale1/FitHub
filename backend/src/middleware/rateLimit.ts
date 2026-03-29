@@ -2,11 +2,12 @@ import rateLimit from "express-rate-limit";
 
 // ─── GLOBAL LIMITER ───────────────────────────────────
 // Límite base para toda la API.
-// 100 req / 15 min por IP — protege contra scraping y DDoS básico.
+// 1000 req / 15 min por IP — la app tiene polling de pasos cada 10s (90 req/15min
+// solo de steps) más dashboard, social, etc. 100 era demasiado bajo para uso normal.
 // Aplicado en index.ts sobre /api/*
 export const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: 1000,
   standardHeaders: true, // Retorna headers RateLimit-* estándar (RFC 6585)
   legacyHeaders: false,
   message: { error: "Demasiadas solicitudes. Intenta de nuevo en 15 minutos." },
