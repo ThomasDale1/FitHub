@@ -195,10 +195,77 @@ export interface FoodEntry {
   carbs: number;
   fat: number;
   fiber: number;
+  sugar: number;
+  sodium: number;
   source: string;
   createdAt: string;
 }
- 
+
+export interface FoodSearchResult {
+  id: string;
+  name: string;
+  brand: string | null;
+  barcode: string | null;
+  source: "SAVED" | "OPEN_FOOD_FACTS" | "USDA";
+  imageUrl: string | null;
+  servingSize: number;
+  servingUnit: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  fiber: number;
+  sugar: number;
+  sodium: number;
+}
+
+export interface RecentFood {
+  name: string;
+  brand: string | null;
+  barcode: string | null;
+  servingSize: number;
+  servingUnit: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  fiber: number;
+  sugar: number;
+  sodium: number;
+  source: string;
+}
+
+export interface AiParsedFood {
+  name: string;
+  servingSize: number;
+  servingUnit: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  fiber: number;
+  sugar: number;
+  sodium: number;
+  confidence: number;
+  source: "AI_TEXT" | "AI_PHOTO";
+}
+
+export interface AiParseResponse {
+  items: AiParsedFood[];
+  totalCalories: number;
+  totalProtein: number;
+  mealType: string;
+  imageUrl?: string;
+}
+
+export interface NutritionStats {
+  streak: number;
+  consistencyScore: number;
+  perfectDays: number;
+  todayPerfect: boolean;
+  daysTracked: number;
+}
+
 export interface FoodLogData {
   id: string;
   date: string;
@@ -611,7 +678,73 @@ export const nutritionAPI = {
  
   // Alimentos guardados
   getSaved: () => api.get("/api/nutrition/saved"),
-  saveFavorite: (data: any) => api.post("/api/nutrition/saved", data),
+  saveFavorite: (data: {
+    name: string;
+    brand?: string;
+    barcode?: string;
+    servingSize?: number;
+    servingUnit?: string;
+    calories: number;
+    protein?: number;
+    carbs?: number;
+    fat?: number;
+    fiber?: number;
+    sugar?: number;
+    sodium?: number;
+  }) => api.post("/api/nutrition/saved", data),
+
+  // Búsqueda de alimentos (Open Food Facts + USDA + SavedFood) — paginada
+  search: (query: string, page = 1) =>
+    api.get<{ results: FoodSearchResult[]; page: number; hasMore: boolean }>(
+      `/api/nutrition/search?q=${encodeURIComponent(query)}&page=${page}`
+    ),
+
+  // Búsqueda por código de barras
+  barcode: (code: string) =>
+    api.get<{ found: boolean; food?: FoodSearchResult; code?: string }>(
+      `/api/nutrition/barcode/${encodeURIComponent(code)}`
+    ),
+
+  // Alimentos recientes del usuario
+  getRecent: () =>
+    api.get<{ recent: RecentFood[] }>("/api/nutrition/recent"),
+
+  // Editar alimento existente
+  editEntry: (id: string, data: Partial<{
+    name: string;
+    brand: string;
+    servingSize: number;
+    servingUnit: string;
+    calories: number;
+    protein: number;
+    carbs: number;
+    fat: number;
+    fiber: number;
+    sugar: number;
+    sodium: number;
+  }>) => api.put(`/api/nutrition/entry/${id}`, data),
+
+  // AI texto → alimentos
+  aiParse: (text: string, mealType?: string) =>
+    api.post<AiParseResponse>("/api/nutrition/ai/parse", { text, mealType }),
+
+  // AI foto → alimentos
+  aiPhoto: (imageUrl: string, mealType?: string) =>
+    api.post<AiParseResponse>("/api/nutrition/ai/photo", { imageUrl, mealType }),
+
+  // Top alimentos más buscados globalmente
+  getPopular: () =>
+    api.get<{ results: FoodSearchResult[] }>("/api/nutrition/popular"),
+
+  // Eliminar alimento guardado
+  deleteSaved: (id: string) => api.delete(`/api/nutrition/saved/${id}`),
+
+  // Toggle favorito en SavedFood
+  toggleFavorite: (id: string) =>
+    api.post(`/api/nutrition/saved/${id}/favorite`),
+
+  // Estadísticas de nutrición (streak, consistency, perfect days)
+  getStats: () => api.get<NutritionStats>("/api/nutrition/stats"),
 };
  
 // ─── AI Coach API (Sprint 3B) ─────────────────────────

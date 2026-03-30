@@ -25,6 +25,17 @@ model User {
   carbsGoal      Float?
   fatGoal        Float?
   activityLevel  String?
+
+  // Fasting
+  fastingEnabled    Boolean  @default(false)
+  fastingProtocol   String?  // "16:8", "18:6", "20:4", "custom"
+  fastingStartHour  Int?     // Hora inicio ayuno (0-23)
+  fastingHours      Int?     // Horas de ayuno
+
+  // Micro-nutrient goals
+  fiberGoal     Float?   // default 25g
+  sugarGoal     Float?   // default 30g (OMS)
+  sodiumGoal    Float?   // default 2300mg
   xp              Int       @default(0)
   level           Int       @default(1)
   streak          Int       @default(0)
@@ -262,6 +273,7 @@ enum FoodSource {
   MANUAL
   BARCODE
   AI_PHOTO
+  AI_TEXT
   SEARCH
   SAVED
 }
@@ -464,7 +476,41 @@ model SavedFood {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([userId, name])
   @@map("saved_foods")
+}
+
+// ─── FOOD CACHE (Global cache de APIs externas) ──────
+model FoodCache {
+  id        String   @id @default(cuid())
+
+  barcode   String?  @unique
+  name      String
+  brand     String?
+  source    String   // "OPEN_FOOD_FACTS" | "USDA"
+  sourceId  String?  // OFF code o USDA fdcId
+
+  servingSize    Float
+  servingUnit    String
+  calories       Int
+  protein        Float
+  carbs          Float
+  fat            Float
+  fiber          Float    @default(0)
+  sugar          Float    @default(0)
+  sodium         Float    @default(0)
+
+  imageUrl  String?
+  rawData   Json?
+
+  searchHits Int     @default(1)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([name])
+  @@index([barcode])
+  @@map("food_cache")
 }
 
 // ─── AI CHAT MESSAGES ─────────────────────────────────

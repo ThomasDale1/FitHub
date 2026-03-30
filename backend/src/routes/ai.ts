@@ -28,6 +28,9 @@ async function buildUserContext(userId: string, clientDate?: string): Promise<st
       xp: true,
       level: true,
       streak: true,
+      proteinGoal: true,
+      carbsGoal: true,
+      fatGoal: true,
     },
   })
 
@@ -80,6 +83,7 @@ async function buildUserContext(userId: string, clientDate?: string): Promise<st
       totalFat: true,
       calorieGoal: true,
       waterMl: true,
+      waterGoalMl: true,
     },
   })
 
@@ -113,13 +117,22 @@ async function buildUserContext(userId: string, clientDate?: string): Promise<st
     context += "\n"
   }
 
+  const parsedClientDate = clientDate ? new Date(clientDate) : null
+  const clientHour = parsedClientDate && !Number.isNaN(parsedClientDate.getTime())
+    ? parsedClientDate.getHours()
+    : new Date().getHours()
+
   if (todayNutrition) {
     context += `NUTRICIÓN HOY:\n`
     context += `- Calorías: ${todayNutrition.totalCalories}/${todayNutrition.calorieGoal} kcal\n`
-    context += `- Proteína: ${todayNutrition.totalProtein}g\n`
-    context += `- Carbos: ${todayNutrition.totalCarbs}g\n`
-    context += `- Grasa: ${todayNutrition.totalFat}g\n`
-    context += `- Agua: ${todayNutrition.waterMl}ml\n`
+    context += `- Proteína: ${todayNutrition.totalProtein}g/${user?.proteinGoal ?? 150}g meta\n`
+    context += `- Carbos: ${todayNutrition.totalCarbs}g/${user?.carbsGoal ?? 250}g meta\n`
+    context += `- Grasa: ${todayNutrition.totalFat}g/${user?.fatGoal ?? 65}g meta\n`
+    context += `- Agua: ${todayNutrition.waterMl}/${todayNutrition.waterGoalMl}ml\n`
+    context += `- Hora actual: ${clientHour}:00\n`
+  } else {
+    context += `NUTRICIÓN HOY: Sin registros aún\n`
+    context += `- Hora actual: ${clientHour}:00\n`
   }
 
   return context
@@ -286,7 +299,7 @@ router.post("/quick", async (req: Request, res: Response) => {
 
     const prompts: Record<string, string> = {
       workout_suggestion: "Basándote en mis últimos workouts, ¿qué debería entrenar hoy? Dame un plan concreto con ejercicios, series y repeticiones.",
-      nutrition_tip: "Analiza mi nutrición de hoy y dame 2-3 consejos específicos para mejorar mis macros.",
+      nutrition_tip: "Analiza mi nutrición de hoy con los datos que tienes. Da UN consejo breve (max 2 frases) y accionable. Si me falta proteína, sugiere alimentos específicos con gramos. Si ya excedí calorías, sé empático. Si es temprano y no he loggeado nada, motiva. Responde en español casual.",
       motivation: "Dame motivación basada en mi progreso real. ¿Qué he logrado y cuál es mi siguiente meta?",
       recovery: "Basándote en mis workouts recientes, ¿necesito un día de descanso? ¿Algún grupo muscular que deba descansar?",
     }
