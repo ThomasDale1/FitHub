@@ -235,29 +235,40 @@ router.post("/entry", async (req: Request, res: Response) => {
     // Recalcular totales (outside the transaction — non-critical aggregate)
     const updatedLog = await recalculateTotals(foodLog.id)
 
-    // Background: auto-save to SavedFood with timesUsed++ (flywheel effect)
+    // Background: auto-save to SavedFood with timesUsed++ (best-effort flywheel effect)
     if (name && calories > 0) {
       setImmediate(async () => {
         try {
-          await prisma.savedFood.upsert({
-            where: { userId_name: { userId: user.id, name } },
-            update: { timesUsed: { increment: 1 } },
-            create: {
-              userId: user.id,
-              name,
-              brand: brand || null,
-              barcode: barcode || null,
-              servingSize: servingSize || 1,
-              servingUnit: servingUnit || "porción",
-              calories,
-              protein: protein || 0,
-              carbs: carbs || 0,
-              fat: fat || 0,
-              fiber: fiber || 0,
-              isFavorite: false,
-            },
+          const existingSavedFood = await prisma.savedFood.findFirst({
+            where: { userId: user.id, name },
           })
-        } catch { /* best-effort background save */ }
+
+          if (existingSavedFood) {
+            await prisma.savedFood.update({
+              where: { id: existingSavedFood.id },
+              data: { timesUsed: { increment: 1 } },
+            })
+          } else {
+            await prisma.savedFood.create({
+              data: {
+                userId: user.id,
+                name,
+                brand: brand || null,
+                barcode: barcode || null,
+                servingSize: servingSize || 1,
+                servingUnit: servingUnit || "porción",
+                calories,
+                protein: protein || 0,
+                carbs: carbs || 0,
+                fat: fat || 0,
+                fiber: fiber || 0,
+                isFavorite: false,
+              },
+            })
+          }
+        } catch {
+          /* best-effort background save */
+        }
       })
     }
 
