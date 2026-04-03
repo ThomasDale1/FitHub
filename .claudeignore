@@ -9,6 +9,7 @@ backend/node_modules/
 backend/prisma/client/  # Si generas el cliente ahí
 backend/dist/
 backend/build/
+backend/prisma/seed.ts
 
 # Mobile (Expo/React Native) especifico
 mobile/node_modules/
@@ -27,6 +28,7 @@ mobile/.gradle/
 mobile/build.gradle
 mobile/settings.gradle
 mobile/gradlew*
+mobile/assets/
 
 
 # Backend adicional
@@ -34,3 +36,4 @@ backend/prisma/migrations/   # Son archivos de texto gigantes que Claude no nece
 backend/src/generated/       # Todo lo que sea código autogenerado (como tipos de Prisma)
 
 
+VISION.md

@@ -290,15 +290,19 @@ export default function StepsScreen() {
   const [stepSource, setStepSource] = useState<"healthkit" | "health_connect" | "pedometer">("pedometer");
   const subscriptionRef = useRef<any>(null);
   const healthPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const liveStepsRef = useRef(0);
 
   // Ref para guardar pasos base (antes de iniciar suscripción)
   const initialStepsRef = useRef(0);
 
   // ─── Health / Pedometer setup ────────────────────────
   useEffect(() => {
+    let mounted = true;
+
     const setup = async () => {
       // 1. Try HealthKit / Health Connect first
       const source = await initHealthSteps();
+      if (!mounted) return;
       setStepSource(source);
       const usingHealth = isUsingHealthService();
 
@@ -306,6 +310,7 @@ export default function StepsScreen() {
         // Health platform available — read initial steps
         try {
           const result = await healthGetSteps();
+          if (!mounted) return;
           console.log(`🦶 [${source}] steps: ${result.steps}`);
           setLiveSteps(result.steps);
           setPedometerAvailable(true);
@@ -316,22 +321,25 @@ export default function StepsScreen() {
           console.log("Error getting health steps:", err);
         }
 
+        if (!mounted) return;
         // HealthKit/Health Connect don't support real-time subscriptions
         // like CMPedometer — poll every 10 seconds for near-real-time updates
         healthPollRef.current = setInterval(async () => {
           try {
             const result = await healthGetSteps();
-            setLiveSteps(result.steps);
+            if (mounted) setLiveSteps(result.steps);
           } catch {}
         }, 10000);
       } else {
         // Fallback to raw CMPedometer
         const available = await Pedometer.isAvailableAsync();
+        if (!mounted) return;
         setPedometerAvailable(available);
 
         if (available) {
           try {
             const steps = await getStepsSinceMidnight();
+            if (!mounted) return;
             console.log(`🦶 Pedometer raw value: ${steps}`);
             initialStepsRef.current = steps;
             setLiveSteps(steps);
@@ -342,10 +350,11 @@ export default function StepsScreen() {
             console.log("Error getting step count:", err);
           }
 
+          if (!mounted) return;
           // watchStepCount devuelve pasos ACUMULADOS desde que inició
           // la suscripción, por eso usamos initialSteps + result.steps
           subscriptionRef.current = Pedometer.watchStepCount((result) => {
-            setLiveSteps(initialStepsRef.current + result.steps);
+            if (mounted) setLiveSteps(initialStepsRef.current + result.steps);
           });
         }
       }
@@ -354,6 +363,7 @@ export default function StepsScreen() {
     setup();
 
     return () => {
+      mounted = false;
       if (subscriptionRef.current) {
         subscriptionRef.current.remove();
       }
@@ -424,14 +434,21 @@ export default function StepsScreen() {
     return () => subscription.remove();
   }, [pedometerAvailable, liveSteps, fetchData]);
 
-  // ─── Sync al backend cada 60 segundos ─────────────
+  // Keep ref in sync so the sync interval always reads the latest value
   useEffect(() => {
-    if (liveSteps <= 0) return;
+    liveStepsRef.current = liveSteps;
+  }, [liveSteps]);
+
+  // ─── Sync al backend cada 60 segundos ─────────────
+  // Usa ref para leer el valor actual sin recrear el interval en cada cambio
+  useEffect(() => {
     const syncInterval = setInterval(() => {
-      stepsAPI.syncSteps(liveSteps).catch(() => {});
+      if (liveStepsRef.current > 0) {
+        stepsAPI.syncSteps(liveStepsRef.current).catch(() => {});
+      }
     }, 60000);
     return () => clearInterval(syncInterval);
-  }, [liveSteps]);
+  }, []);
 
 
   const onRefresh = useCallback(async () => {

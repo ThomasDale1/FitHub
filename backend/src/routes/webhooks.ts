@@ -79,25 +79,80 @@ router.post(
           username = email.split("@")[0].slice(0, 26) + "_" + Date.now().toString().slice(-4);
         }
 
-        // Ensure uniqueness — if taken, append random suffix.
-        // upsert below also has @unique on username; catching P2002 there
-        // would be cleaner, but a pre-check keeps the error message readable.
-        const existing = await prisma.user.findUnique({ where: { username } });
-        if (existing) {
-          username = username.slice(0, 26) + "_" + Date.now().toString().slice(-4);
+        // Try upsert directly — if username collides (P2002), retry with random suffix.
+        // This eliminates the TOCTOU race between findUnique and upsert.
+        const doUpsert = (uname: string) =>
+          prisma.user.upsert({
+            where: { clerkId },
+            update: { email, name: safeName, avatarUrl },
+            create: {
+              clerkId,
+              email,
+              name: safeName,
+              avatarUrl,
+              username: uname,
+            },
+          });
+
+        const attemptUpsert = async (uname: string) => {
+          await doUpsert(uname);
         }
 
-        await prisma.user.upsert({
-          where: { clerkId },
-          update: { email, name: safeName, avatarUrl },
-          create: {
-            clerkId,
-            email,
-            name: safeName,
-            avatarUrl,
-            username,
-          },
-        });
+        let upsertError: any = null
+        try {
+          await attemptUpsert(username)
+        } catch (err: any) {
+          if (err?.code === "P2002") {
+            const target = err.meta?.target
+            const isUsernameConflict = Array.isArray(target)
+              ? target.includes("username")
+              : target === "username"
+
+            if (!isUsernameConflict) {
+              // Different unique constraint failed: bubble up after logging.
+              console.error("Webhook user.created unique constraint failed on non-username field", { target, err })
+              throw err
+            }
+
+            // Username conflict: generate safer fallback and do controlled retries.
+            const base = username.slice(0, 22).replace(/[^a-z0-9._]/g, "") || "user"
+            const trySuffix = () => Math.floor(1000 + Math.random() * 9000).toString()
+            let retryUsername = `${base}_${trySuffix()}`
+
+            for (let attempt = 1; attempt <= 2; attempt++) {
+              try {
+                await attemptUpsert(retryUsername)
+                username = retryUsername
+                upsertError = null
+                break
+              } catch (retryErr: any) {
+                if (retryErr?.code !== "P2002") {
+                  console.error("Webhook user.created upsert failed on non-username constraint during retry", { retryErr })
+                  throw retryErr
+                }
+                const retryTarget = retryErr.meta?.target
+                const isRetryUsernameConflict = Array.isArray(retryTarget)
+                  ? retryTarget.includes("username")
+                  : retryTarget === "username"
+
+                if (!isRetryUsernameConflict) {
+                  console.error("Webhook user.created unique constraint failed on non-username field during retry", { retryTarget, retryErr })
+                  throw retryErr
+                }
+
+                upsertError = retryErr
+                retryUsername = `${base}_${trySuffix()}`
+              }
+            }
+
+            if (upsertError) {
+              console.error("Webhook user.created retry attempts exhausted", { username: retryUsername, upsertError })
+              throw upsertError
+            }
+          } else {
+            throw err
+          }
+        }
 
         console.log(`✅ Usuario creado en DB: ${email} (@${username})`);
         break;

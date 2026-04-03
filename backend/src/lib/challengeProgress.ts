@@ -8,6 +8,7 @@
 //   puntaje gana al finalizar el tiempo
 // ─────────────────────────────────────────────────────
 import { prisma } from "./prisma.js"
+import type { Prisma } from "../generated/prisma/client.js"
 import { sendPushToUser, sendPushToMany } from "./pushNotifications.js"
 
 // XP fractions awarded on challenge completion
@@ -77,8 +78,26 @@ export async function updateChallengeProgress(ctx: ProgressContext) {
       })
 
       // ─── MILESTONE MODE: el primero que llega al goal gana ───
+      // Usa transacción serializable para evitar que dos usuarios
+      // pasen el guard simultáneamente y ambos "ganen".
       if (challenge.mode === "MILESTONE" && newValue >= challenge.goal && !participation.isWinner) {
-        await handleMilestoneWin(ctx.userId, participation.id, challenge)
+        await prisma.$transaction(async (tx) => {
+          // Re-check dentro de la transacción — si otro request ya ganó, el challenge
+          // estará COMPLETED y/o el participante ya tendrá isWinner = true.
+          const freshChallenge = await tx.challenge.findUnique({
+            where: { id: challenge.id },
+            select: { status: true },
+          })
+          if (freshChallenge?.status !== "ACTIVE") return
+
+          const freshParticipation = await tx.challengeParticipant.findUnique({
+            where: { id: participation.id },
+            select: { isWinner: true },
+          })
+          if (freshParticipation?.isWinner) return
+
+          await handleMilestoneWin(tx, ctx.userId, participation.id, challenge)
+        }, { isolationLevel: "Serializable" })
       }
       // TIMED mode: no hace nada aquí, se resuelve al expirar
     }
@@ -228,6 +247,7 @@ async function calcDistance(userId: string, since: Date, until: Date): Promise<n
 // ─── MILESTONE: primer lugar gana ───────────────────
 
 async function handleMilestoneWin(
+  tx: Prisma.TransactionClient,
   userId: string,
   participationId: string,
   challenge: { id: string; title: string; xpReward: number }
@@ -236,22 +256,22 @@ async function handleMilestoneWin(
 
   // Fetch winner name and update winner state concurrently to avoid a serial stall
   const [winner] = await Promise.all([
-    prisma.user.findUnique({ where: { id: userId }, select: { name: true } }),
-    prisma.challengeParticipant.update({
+    tx.user.findUnique({ where: { id: userId }, select: { name: true } }),
+    tx.challengeParticipant.update({
       where: { id: participationId },
       data: { isWinner: true, rank: 1 },
     }),
-    prisma.user.update({
+    tx.user.update({
       where: { id: userId },
       data: { xp: { increment: challenge.xpReward } },
     }),
-    prisma.challenge.update({
+    tx.challenge.update({
       where: { id: challenge.id },
       data: { status: "COMPLETED" },
     }),
   ])
 
-  const otherParticipants = await prisma.challengeParticipant.findMany({
+  const otherParticipants: Array<{ id: string; userId: string }> = await tx.challengeParticipant.findMany({
     where: {
       challengeId: challenge.id,
       userId: { not: userId },
@@ -268,13 +288,13 @@ async function handleMilestoneWin(
   const tasks: Promise<unknown>[] = [
     // Asignar ranks a no-ganadores y dar XP parcial
     ...otherParticipants.map((p, i) =>
-      prisma.challengeParticipant.update({ where: { id: p.id }, data: { rank: i + 2 } })
+      tx.challengeParticipant.update({ where: { id: p.id }, data: { rank: i + 2 } })
     ),
     ...otherParticipants.map((p) =>
-      prisma.user.update({ where: { id: p.userId }, data: { xp: { increment: partialXP } } })
+      tx.user.update({ where: { id: p.userId }, data: { xp: { increment: partialXP } } })
     ),
     // Notificar al ganador
-    prisma.notification.create({
+    tx.notification.create({
       data: {
         userId,
         type: "challenge_won",
@@ -291,7 +311,7 @@ async function handleMilestoneWin(
   if (otherParticipants.length > 0) {
     // Notificar a los demás que alguien ganó (batch)
     tasks.push(
-      prisma.notification.createMany({
+      tx.notification.createMany({
         data: otherParticipants.map((p) => ({
           userId: p.userId,
           type: "challenge_ended",
