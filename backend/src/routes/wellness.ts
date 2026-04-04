@@ -338,11 +338,8 @@ router.get("/readiness/history", async (req: Request, res: Response) => {
 // GET /api/wellness/dashboard — todo lo que necesita la Wellness Tab
 router.get("/dashboard", async (req: Request, res: Response) => {
   try {
-    console.log("[dashboard] Starting dashboard request")
     const { userId: clerkId } = getAuth(req)
-    console.log("[dashboard] Clerk ID:", clerkId)
     const user = await getUserByClerkId(clerkId!)
-    console.log("[dashboard] User found:", user?.id)
     if (!user) { res.status(404).json({ error: "Usuario no encontrado" }); return }
 
     const today = todayDate()
@@ -350,7 +347,6 @@ router.get("/dashboard", async (req: Request, res: Response) => {
     const endOfDay = new Date(today)
     endOfDay.setDate(endOfDay.getDate() + 1)
 
-    console.log("[dashboard] Fetching data...")
     // Fetch en paralelo
     const [
       readinessExisting,
@@ -382,20 +378,15 @@ router.get("/dashboard", async (req: Request, res: Response) => {
       }),
     ])
 
-    console.log("[dashboard] Data fetched, calculating readiness...")
     // Calcular readiness si no existe
     let readiness = readinessExisting
     if (!readiness) {
-      console.log("[dashboard] Computing readiness for user:", user.id)
       const result = await computeReadinessForUser(user.id, today)
-      console.log("[dashboard] Readiness computed:", result)
       readiness = await prisma.readinessScore.create({
         data: { userId: user.id, date: today, ...result },
       })
-      console.log("[dashboard] Readiness saved")
     }
 
-    console.log("[dashboard] Calculating journal streak...")
     // Calcular journal streak
     const journalDays = new Set(
       journalStreak.map((j) => j.createdAt.toISOString().split("T")[0])
@@ -409,7 +400,6 @@ router.get("/dashboard", async (req: Request, res: Response) => {
       else if (i > 0) break // permitir que hoy no tenga aún
     }
 
-    console.log("[dashboard] Sending response...")
     res.json({
       data: {
         readiness: {
@@ -452,7 +442,6 @@ router.get("/dashboard", async (req: Request, res: Response) => {
         },
       },
     })
-    console.log("[dashboard] Response sent successfully")
   } catch (err) {
     console.error("Error fetching wellness dashboard:", err)
     res.status(500).json({ error: "Error interno" })
