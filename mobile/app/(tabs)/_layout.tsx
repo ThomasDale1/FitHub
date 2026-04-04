@@ -69,13 +69,16 @@ export default function TabsLayout() {
   const { getToken } = useAuth();
   const { isActive, step, workoutPhase } = useTour();
 
-  // Configurar el token function una sola vez
+  // Setup token function when it changes
   useEffect(() => {
     setGetTokenFn(getToken);
-    // Init step tracking y background notifications DESPUÉS de auth
+  }, [getToken]);
+
+  // Initialize step tracking and background notifications once on mount
+  useEffect(() => {
     initStepTracking();
     registerBackgroundNotificationHandler();
-  }, [getToken]);
+  }, []);
 
   // Initialize push notifications
   useNotifications();
@@ -128,6 +131,15 @@ export default function TabsLayout() {
           title: "Social",
           tabBarIcon: ({ color, size }) => (
             <SocialTabIcon color={color} size={size} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="wellness"
+        options={{
+          title: "Bienestar",
+          tabBarIcon: ({ color, size }) => (
+            <TabIcon name="leaf-outline" color={color} size={size} />
           ),
         }}
       />

@@ -22,6 +22,14 @@ module.exports = {
         },
         success: "#00D48A",
         streak: "#FF6B35",
+        wellness: {
+          DEFAULT: "#7B68EE",
+          sleep: "#5B4FCF",
+          breath: "#00C9A7",
+          mood: "#FFB347",
+          danger: "#FF6B6B",
+          glow: "#4ECDC4",
+        },
         text: {
           primary: "#FFFFFF",
           secondary: "#A0A0B0",

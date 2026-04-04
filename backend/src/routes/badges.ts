@@ -93,6 +93,28 @@ const BADGE_DEFINITIONS = [
   { slug: "logs_30_days", name: "Nutrition Master", description: "Registra comida 30 días seguidos", icon: "🏆", category: "NUTRITION", rarity: "EPIC", requirement: { type: "food_log_streak", value: 30 }, xpReward: 500, sortOrder: 3 },
   { slug: "logs_90_days", name: "Diet Champion", description: "Registra comida 90 días seguidos", icon: "👨‍🍳", category: "NUTRITION", rarity: "LEGENDARY", requirement: { type: "food_log_streak", value: 90 }, xpReward: 1500, sortOrder: 4 },
 
+  // ═══ WELLNESS ══════════════════════════════════════
+  // Mood logging
+  { slug: "first_mood", name: "Mood Check", description: "Registra tu ánimo por primera vez", icon: "😊", category: "WELLNESS", rarity: "COMMON", requirement: { type: "mood_logs", value: 1 }, xpReward: 25, sortOrder: 1 },
+  { slug: "mood_7_streak", name: "Mood Tracker", description: "Registra tu ánimo 7 días seguidos", icon: "🌈", category: "WELLNESS", rarity: "RARE", requirement: { type: "mood_log_streak", value: 7 }, xpReward: 150, sortOrder: 2 },
+  { slug: "mood_30_streak", name: "Mood Master", description: "Registra tu ánimo 30 días seguidos", icon: "🧠", category: "WELLNESS", rarity: "EPIC", requirement: { type: "mood_log_streak", value: 30 }, xpReward: 500, sortOrder: 3 },
+  // Sleep logging
+  { slug: "first_sleep", name: "Sleep Logger", description: "Registra tu sueño por primera vez", icon: "😴", category: "WELLNESS", rarity: "COMMON", requirement: { type: "sleep_logs", value: 1 }, xpReward: 25, sortOrder: 4 },
+  { slug: "sleep_7_streak", name: "Sleep Tracker", description: "Registra tu sueño 7 días seguidos", icon: "🌙", category: "WELLNESS", rarity: "RARE", requirement: { type: "sleep_log_streak", value: 7 }, xpReward: 150, sortOrder: 5 },
+  { slug: "sleep_30_streak", name: "Sleep Scientist", description: "Registra tu sueño 30 días seguidos", icon: "💤", category: "WELLNESS", rarity: "EPIC", requirement: { type: "sleep_log_streak", value: 30 }, xpReward: 500, sortOrder: 6 },
+  // Breathing
+  { slug: "first_breath", name: "First Breath", description: "Completa tu primera sesión de respiración", icon: "🫁", category: "WELLNESS", rarity: "COMMON", requirement: { type: "breathing_sessions", value: 1 }, xpReward: 25, sortOrder: 7 },
+  { slug: "breathing_10", name: "Breath Master", description: "Completa 10 sesiones de respiración", icon: "🧘", category: "WELLNESS", rarity: "RARE", requirement: { type: "breathing_sessions", value: 10 }, xpReward: 150, sortOrder: 8 },
+  { slug: "breathing_50", name: "Zen Mode", description: "Completa 50 sesiones de respiración", icon: "☮️", category: "WELLNESS", rarity: "EPIC", requirement: { type: "breathing_sessions", value: 50 }, xpReward: 500, sortOrder: 9 },
+  { slug: "breathing_100_min", name: "Breathwork Hour", description: "Acumula 100 minutos de respiración", icon: "🌬️", category: "WELLNESS", rarity: "RARE", requirement: { type: "breathing_total_min", value: 100 }, xpReward: 200, sortOrder: 10 },
+  // Journal
+  { slug: "first_journal", name: "Dear Diary", description: "Escribe tu primera entrada de diario", icon: "📓", category: "WELLNESS", rarity: "COMMON", requirement: { type: "journal_entries", value: 1 }, xpReward: 25, sortOrder: 11 },
+  { slug: "journal_7_streak", name: "Writer", description: "Escribe en tu diario 7 días seguidos", icon: "✍️", category: "WELLNESS", rarity: "RARE", requirement: { type: "journal_streak", value: 7 }, xpReward: 150, sortOrder: 12 },
+  { slug: "journal_30_streak", name: "Journaling Pro", description: "Escribe en tu diario 30 días seguidos", icon: "📖", category: "WELLNESS", rarity: "EPIC", requirement: { type: "journal_streak", value: 30 }, xpReward: 500, sortOrder: 13 },
+  // Readiness
+  { slug: "green_zone_7", name: "Peak Week", description: "Mantén readiness GREEN 7 días seguidos", icon: "💚", category: "WELLNESS", rarity: "RARE", requirement: { type: "green_zone_streak", value: 7 }, xpReward: 200, sortOrder: 14 },
+  { slug: "green_zone_30", name: "Optimized", description: "Mantén readiness GREEN 30 días seguidos", icon: "🟢", category: "WELLNESS", rarity: "LEGENDARY", requirement: { type: "green_zone_streak", value: 30 }, xpReward: 2000, sortOrder: 15 },
+
   // ═══ ONBOARDING ════════════════════════════════════
   { slug: "explorer", name: "Explorer", description: "Completa el desafío de bienvenida de FitHub", icon: "🏅", category: "MILESTONE", rarity: "COMMON", requirement: { type: "onboarding_complete", value: 1 }, xpReward: 100, sortOrder: 0 },
 
@@ -116,6 +138,147 @@ function calculateLevel(xp: number): number {
     xpForNext = Math.floor(xpForNext * 1.4)
   }
   return level
+}
+
+// ─── Calculate wellness streaks ──────────────────────
+
+async function calcMoodLogStreak(userId: string): Promise<number> {
+  const logs = await prisma.moodLog.findMany({
+    where: { userId },
+    orderBy: { loggedAt: "desc" },
+    take: 365,
+    select: { loggedAt: true },
+  })
+  if (logs.length === 0) return 0
+
+  // Group by date
+  const dates = [...new Set(logs.map((l) => l.loggedAt.toISOString().split("T")[0]))]
+  dates.sort((a, b) => b.localeCompare(a)) // newest first
+
+  let streak = 0
+  const today = new Date().toISOString().split("T")[0]
+  const yesterday = new Date()
+  yesterday.setDate(yesterday.getDate() - 1)
+  const yesterdayStr = yesterday.toISOString().split("T")[0]
+  
+  // Compute offset: if dates[0] is yesterday (today missing), set offset = 1; else 0
+  const startOffset = dates[0] === yesterdayStr ? 1 : 0
+
+  for (let i = 0; i < dates.length; i++) {
+    const expected = new Date(today + "T00:00:00.000Z")
+    expected.setUTCDate(expected.getUTCDate() - (i + startOffset))
+    const expStr = expected.toISOString().split("T")[0]
+    if (dates[i] === expStr) streak++
+    else break
+  }
+  return streak
+}
+
+async function calcSleepLogStreak(userId: string): Promise<number> {
+  const logs = await prisma.sleepLog.findMany({
+    where: { userId },
+    orderBy: { date: "desc" },
+    take: 365,
+    select: { date: true },
+  })
+  if (logs.length === 0) return 0
+
+  // Deduplicate by date: keep one entry per date
+  const uniqueDateSet = new Set(logs.map((l) => l.date.toISOString().split("T")[0]))
+  const uniqueDates = Array.from(uniqueDateSet).sort((a, b) => b.localeCompare(a)) // newest first
+
+  let streak = 0
+  const today = new Date().toISOString().split("T")[0]
+  const yesterday = new Date()
+  yesterday.setDate(yesterday.getDate() - 1)
+  const yesterdayStr = yesterday.toISOString().split("T")[0]
+  
+  // Compute offset: if uniqueDates[0] is yesterday (today missing), set offset = 1; else 0
+  const startOffset = uniqueDates[0] === yesterdayStr ? 1 : 0
+
+  for (let i = 0; i < uniqueDates.length; i++) {
+    const expected = new Date(today + "T00:00:00.000Z")
+    expected.setUTCDate(expected.getUTCDate() - (i + startOffset))
+    const expStr = expected.toISOString().split("T")[0]
+    if (uniqueDates[i] === expStr) streak++
+    else break
+  }
+  return streak
+}
+
+async function calcJournalStreak(userId: string): Promise<number> {
+  const entries = await prisma.journalEntry.findMany({
+    where: { userId },
+    orderBy: { createdAt: "desc" },
+    take: 365,
+    select: { createdAt: true },
+  })
+  if (entries.length === 0) return 0
+
+  const dates = [...new Set(entries.map((e) => e.createdAt.toISOString().split("T")[0]))]
+  dates.sort((a, b) => b.localeCompare(a))
+
+  let streak = 0
+  const today = new Date().toISOString().split("T")[0]
+  const yesterday = new Date()
+  yesterday.setDate(yesterday.getDate() - 1)
+  const yesterdayStr = yesterday.toISOString().split("T")[0]
+  
+  // Compute offset: if dates[0] is yesterday (today missing), set offset = 1; else 0
+  const startOffset = dates[0] === yesterdayStr ? 1 : 0
+
+  for (let i = 0; i < dates.length; i++) {
+    const expected = new Date(today + "T00:00:00.000Z")
+    expected.setUTCDate(expected.getUTCDate() - (i + startOffset))
+    const expStr = expected.toISOString().split("T")[0]
+    if (dates[i] === expStr) streak++
+    else break
+  }
+  return streak
+}
+
+async function calcGreenZoneStreak(userId: string): Promise<number> {
+  const scores = await prisma.readinessScore.findMany({
+    where: { userId },
+    orderBy: { date: "desc" },
+    take: 365,
+    select: { date: true, zone: true },
+  })
+  if (scores.length === 0) return 0
+
+  // Deduplicate by date: keep one entry per date with GREEN zone
+  const greenDateSet = new Set<string>()
+  const dateToZoneMap = new Map<string, string>()
+  
+  for (const score of scores) {
+    const dateStr = score.date.toISOString().split("T")[0]
+    if (!dateToZoneMap.has(dateStr)) {
+      dateToZoneMap.set(dateStr, score.zone)
+      if (score.zone === "GREEN") {
+        greenDateSet.add(dateStr)
+      }
+    }
+  }
+  
+  const greenDates = Array.from(greenDateSet).sort((a, b) => b.localeCompare(a)) // newest first
+
+  let streak = 0
+  const today = new Date().toISOString().split("T")[0]
+  const yesterday = new Date()
+  yesterday.setDate(yesterday.getDate() - 1)
+  const yesterdayStr = yesterday.toISOString().split("T")[0]
+  
+  // Compute offset: if greenDates[0] is yesterday (today missing), set offset = 1; else 0
+  const startOffset = greenDates.length > 0 && greenDates[0] === yesterdayStr ? 1 : 0
+
+  for (let i = 0; i < greenDates.length; i++) {
+    const expected = new Date(today + "T00:00:00.000Z")
+    expected.setUTCDate(expected.getUTCDate() - (i + startOffset))
+    const expStr = expected.toISOString().split("T")[0]
+    if (greenDates[i] === expStr) streak++
+    else break
+  }
+  return streak
 }
 
 // ─── Calculate step goal streak ───────────────────────
@@ -259,6 +422,16 @@ async function gatherStats(userId: string, userXp: number, userStreak: number, c
     stepGoalStreak,
     foodLogStreak,
     secretStats,
+    // Wellness stats
+    moodLogCount,
+    sleepLogCount,
+    breathingSessionCount,
+    breathingTotalSec,
+    journalEntryCount,
+    moodLogStreak,
+    sleepLogStreak,
+    journalStreak,
+    greenZoneStreak,
   ] = await Promise.all([
     prisma.workout.count({ where: { userId, isCompleted: true } }),
     prisma.workout.aggregate({ where: { userId, isCompleted: true }, _sum: { totalVolume: true } }),
@@ -274,6 +447,16 @@ async function gatherStats(userId: string, userXp: number, userStreak: number, c
     calcStepGoalStreak(userId),
     calcFoodLogStreak(userId, clientDate),
     calcSecretStats(userId, clientEndHour),
+    // Wellness
+    prisma.moodLog.count({ where: { userId } }),
+    prisma.sleepLog.count({ where: { userId } }),
+    prisma.breathingSession.count({ where: { userId } }),
+    prisma.breathingSession.aggregate({ where: { userId }, _sum: { durationSec: true } }),
+    prisma.journalEntry.count({ where: { userId } }),
+    calcMoodLogStreak(userId),
+    calcSleepLogStreak(userId),
+    calcJournalStreak(userId),
+    calcGreenZoneStreak(userId),
   ])
 
   const level = calculateLevel(userXp)
@@ -295,6 +478,16 @@ async function gatherStats(userId: string, userXp: number, userStreak: number, c
     step_goal_streak: stepGoalStreak,
     food_log_streak: foodLogStreak,
     reactions_received: reactionsReceived,
+    // Wellness
+    mood_logs: moodLogCount,
+    sleep_logs: sleepLogCount,
+    breathing_sessions: breathingSessionCount,
+    breathing_total_min: Math.round((breathingTotalSec._sum.durationSec || 0) / 60),
+    journal_entries: journalEntryCount,
+    mood_log_streak: moodLogStreak,
+    sleep_log_streak: sleepLogStreak,
+    journal_streak: journalStreak,
+    green_zone_streak: greenZoneStreak,
     ...secretStats,
   }
 }

@@ -93,6 +93,14 @@ model User {
   weightLogs               WeightLog[]
   showcase                 ProfileShowcase?
 
+  // Wellness (Sprint 7)
+  moodLogs                 MoodLog[]
+  sleepLogs                SleepLog[]
+  journalEntries           JournalEntry[]
+  breathingSessions        BreathingSession[]
+  sorenessLogs             SorenessLog[]
+  readinessScores          ReadinessScore[]
+
   @@map("users")
 }
 
@@ -205,9 +213,11 @@ model Workout {
   // Guardamos el resultado, no los datos fuente
   muscleStimulus Json?
 
-  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  template WorkoutTemplate? @relation(fields: [templateId], references: [id])
-  sets     WorkoutSet[]
+  user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  template      WorkoutTemplate? @relation(fields: [templateId], references: [id])
+  sets          WorkoutSet[]
+  moodLogs      MoodLog[]
+  journalEntries JournalEntry[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -308,6 +318,11 @@ enum ChallengeType {
   PR
   DISTANCE
   CUSTOM
+  // Wellness
+  SLEEP_STREAK
+  MOOD_STREAK
+  BREATHING_MINUTES
+  READINESS_AVG
 }
 
 enum ChallengeMode {
@@ -333,6 +348,7 @@ enum BadgeCategory {
   STEPS
   PR
   SECRET
+  WELLNESS
 }
 
 enum BadgeRarity {
@@ -865,4 +881,160 @@ model ProfileShowcase {
   updatedAt DateTime @updatedAt
 
   @@map("profile_showcases")
+}
+
+// ═══════════════════════════════════════════════════════
+// ─── WELLNESS SYSTEM (Sprint 7) ───────────────────────
+// ═══════════════════════════════════════════════════════
+
+// ─── MOOD LOG ────────────────────────────────────────
+model MoodLog {
+  id        String      @id @default(cuid())
+  userId    String
+  mood      Int         // 1-5 (terrible → excelente)
+  energy    Int         // 1-5 (agotado → explosivo)
+  stress    Int         // 1-5 (relajado → muy estresado)
+  note      String?
+  context   MoodContext @default(STANDALONE)
+  workoutId String?
+
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workout   Workout?    @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+
+  loggedAt  DateTime    @default(now())
+
+  @@index([userId, loggedAt])
+  @@map("mood_logs")
+}
+
+enum MoodContext {
+  STANDALONE
+  PRE_WORKOUT
+  POST_WORKOUT
+}
+
+// ─── SLEEP LOG ───────────────────────────────────────
+model SleepLog {
+  id              String     @id @default(cuid())
+  userId          String
+  date            DateTime   @db.Date
+  bedTime         DateTime
+  wakeTime        DateTime
+  durationMinutes Int
+  quality         Int        @default(3) // 1-5
+  awakenings      Int        @default(0)
+  sleepScore      Int?       // 0-100, calculado
+  notes           String?
+  source          DataSource @default(MANUAL)
+
+  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([userId, date])
+  @@map("sleep_logs")
+}
+
+enum DataSource {
+  MANUAL
+  HEALTH_KIT
+  HEALTH_CONNECT
+  OURA
+  WHOOP
+  GARMIN
+}
+
+// ─── READINESS SCORE (calculado diario) ──────────────
+model ReadinessScore {
+  id                String        @id @default(cuid())
+  userId            String
+  date              DateTime      @db.Date
+  score             Int           // 0-100
+  sleepComponent    Int           // 0-35
+  moodComponent     Int           // 0-20
+  stressComponent   Int           // 0-15
+  loadComponent     Int           // 0-20
+  sorenessComponent Int           // 0-10
+  zone              ReadinessZone
+  recommendation    String?
+
+  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([userId, date])
+  @@map("readiness_scores")
+}
+
+enum ReadinessZone {
+  RED
+  YELLOW
+  GREEN
+}
+
+// ─── JOURNAL ENTRY ───────────────────────────────────
+model JournalEntry {
+  id        String      @id @default(cuid())
+  userId    String
+  content   String
+  type      JournalType @default(FREE)
+  mood      Int?
+  tags      String[]
+  workoutId String?
+
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workout   Workout?    @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime    @default(now())
+
+  @@index([userId, createdAt])
+  @@map("journal_entries")
+}
+
+enum JournalType {
+  FREE
+  GRATITUDE
+  REFLECTION
+  PRE_WORKOUT
+}
+
+// ─── BREATHING SESSION ───────────────────────────────
+model BreathingSession {
+  id          String             @id @default(cuid())
+  userId      String
+  technique   BreathingTechnique
+  durationSec Int
+  targetSec   Int
+  completed   Boolean            @default(true)
+  moodBefore  Int?
+  moodAfter   Int?
+
+  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt   DateTime           @default(now())
+
+  @@index([userId, createdAt])
+  @@map("breathing_sessions")
+}
+
+enum BreathingTechnique {
+  BOX_4_4_4_4
+  RELAXING_4_7_8
+  WIM_HOF
+  COHERENT_5_5
+  ENERGIZING_4_2
+}
+
+// ─── SORENESS LOG (DOMS tracking) ────────────────────
+model SorenessLog {
+  id              String   @id @default(cuid())
+  userId          String
+  date            DateTime @db.Date
+  muscleData      Json     // { "chest": 3, "quads": 4, ... }
+  overallSoreness Int      @default(0) // 0-5
+  notes           String?
+
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([userId, date])
+  @@map("soreness_logs")
 }

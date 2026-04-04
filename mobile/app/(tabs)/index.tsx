@@ -20,7 +20,7 @@ import StreakBadge from "@/components/StreakBadge";
 import XPBar from "@/components/XPBar";
 import WorkoutCard from "@/components/WorkoutCard";
 import { useDashboard } from "@/hooks/useUserData";
-import { socialAPI, userAPI } from "@/lib/api";
+import { socialAPI, userAPI, wellnessAPI } from "@/lib/api";
 
 // Fallback para cuando el backend no responde
 const FALLBACK_DATA = {
@@ -48,6 +48,7 @@ export default function DashboardScreen() {
   const { data, loading, error, refetch } = useDashboard();
   const [refreshing, setRefreshing] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [readiness, setReadiness] = useState<{ score: number; zone: "RED" | "YELLOW" | "GREEN" } | null>(null);
 
   // Check onboarding status — redirect if not completed
   useEffect(() => {
@@ -68,7 +69,7 @@ export default function DashboardScreen() {
     checkOnboarding();
   }, []);
 
-  // Fetch unread notifications
+  // Fetch unread notifications + readiness
   useEffect(() => {
     const fetchUnread = async () => {
       try {
@@ -76,7 +77,15 @@ export default function DashboardScreen() {
         setUnreadCount(res.data.unreadCount || 0);
       } catch {}
     };
+    const fetchReadiness = async () => {
+      try {
+        const res = await wellnessAPI.getReadiness();
+        const d = res.data?.data;
+        if (d) setReadiness({ score: d.score, zone: d.zone });
+      } catch {}
+    };
     fetchUnread();
+    fetchReadiness();
   }, []);
 
   // Usar datos reales o fallback
@@ -90,7 +99,18 @@ export default function DashboardScreen() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
+    // Fetch dashboard data
     await refetch();
+    // Also fetch readiness and notifications
+    try {
+      const notifRes = await socialAPI.getNotifications();
+      setUnreadCount(notifRes.data.unreadCount || 0);
+    } catch {}
+    try {
+      const readinessRes = await wellnessAPI.getReadiness();
+      const d = readinessRes.data?.data;
+      if (d) setReadiness({ score: d.score, zone: d.zone });
+    } catch {}
     setRefreshing(false);
   }, [refetch]);
 
@@ -183,6 +203,59 @@ export default function DashboardScreen() {
               level={dashData.user.level}
             />
           </View>
+
+          {/* ─── READINESS MINI WIDGET ────────────────── */}
+          {readiness && (
+            <TouchableOpacity
+              className="mt-4 bg-background-card border border-background-elevated rounded-3xl p-4 flex-row items-center gap-x-4"
+              onPress={() => router.push("/(tabs)/wellness" as any)}
+            >
+              <View
+                className="w-12 h-12 rounded-full items-center justify-center"
+                style={{
+                  backgroundColor:
+                    readiness.zone === "GREEN"
+                      ? "#00D48A20"
+                      : readiness.zone === "YELLOW"
+                        ? "#F5C84220"
+                        : "#FF6B6B20",
+                  borderWidth: 2.5,
+                  borderColor:
+                    readiness.zone === "GREEN"
+                      ? "#00D48A"
+                      : readiness.zone === "YELLOW"
+                        ? "#F5C842"
+                        : "#FF6B6B",
+                }}
+              >
+                <Text
+                  style={{
+                    fontSize: 16,
+                    fontWeight: "800",
+                    color:
+                      readiness.zone === "GREEN"
+                        ? "#00D48A"
+                        : readiness.zone === "YELLOW"
+                          ? "#F5C842"
+                          : "#FF6B6B",
+                  }}
+                >
+                  {readiness.score}
+                </Text>
+              </View>
+              <View className="flex-1">
+                <Text className="text-white font-bold text-sm">Readiness</Text>
+                <Text className="text-text-muted text-xs mt-0.5">
+                  {readiness.zone === "GREEN"
+                    ? "Listo para entrenar intenso"
+                    : readiness.zone === "YELLOW"
+                      ? "Energía moderada hoy"
+                      : "Tu cuerpo pide descanso"}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#6B6B80" />
+            </TouchableOpacity>
+          )}
 
           {/* ─── STATS GRID ─────────────────────────── */}
           <Text className="text-white font-bold text-lg mt-6 mb-3">

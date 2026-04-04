@@ -495,12 +495,11 @@ Queries sin índice compuesto óptimo (verificado contra el schema):
 #### 30. API_URL hardcodeada en producción (no usa env var)
 
 - **Archivo:** `mobile/lib/api.ts` línea 7
-- **Condición:** `export const API_URL = "https://fithub-d1pe.onrender.com"` — URL hardcodeada directamente en el código fuente. Para apuntar a un servidor de staging o local durante desarrollo, hay que editar el archivo y acordarse de no comitearlo con la URL de desarrollo.
+- **Condición:** `export const API_URL = "https://fith.onrender.com"` — URL hardcodeada directamente en el código fuente. Para apuntar a un servidor de staging o local durante desarrollo, hay que editar el archivo y acordarse de no comitearlo con la URL de desarrollo.
 - **Problema adicional:** El nombre del proyecto en Render (`fithub-d1pe`) es visible en el código fuente público si el repo se hace open source.
 - **Fix:** `export const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "https://fithub-d1pe.onrender.com"` — ya existe la variable en `.env.example`.
 
 ---
-
 #### 31. Coordenadas geográficas sin validación de rango
 
 - **Archivo:** `backend/src/routes/places.ts` líneas 23-25
@@ -1534,3 +1533,24 @@ Ideas más ambiciosas que requieren tecnología madura o inversión mayor.
 | 38 | Link de invitación de app en perfil | `profile.tsx` | 2h |
 | 39 | "Entrena con música" — abrir Spotify sin salir de la app | `active.tsx` | 2h |
 | 40 | Preview de tu posición en ranking antes de empezar el workout | `workout.tsx` | 1h |
+
+
+Fase 2 — Engagement Layer
+Breathing exercises (UI animada + registro)
+Journaling (UI + almacenamiento)
+DOMS tracking (body map)
+Recovery protocols (checklists)
+Fase 3 — Intelligence
+Motor de correlaciones/insights
+Integración con AI Coach (contexto wellness)
+Weekly Wellness Report
+Push notifications de wellness
+Fase 4 — Gamification + Polish
+Badges de WELLNESS
+Wellness challenges
+Readiness → workout intensity suggestions
+Readiness → nutrition adjustments
+Microinteracciones, animaciones, sonido
+Ese es el diseño completo del sistema. Cada pieza está pensada para conectarse con lo que ya existe (muscleStimulus, badges, AI Coach, nutrition, steps) y el modelo de scoring tiene fallbacks para funcionar con datos parciales desde el día 1.
+
+¿Quieres que empiece con la Fase 1 (modelos Prisma + Readiness Engine + Wellness Tab UI)? Dime si quieres ajustar algo del diseño antes de codear.

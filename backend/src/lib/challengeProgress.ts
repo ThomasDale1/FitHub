@@ -54,12 +54,19 @@ export async function updateChallengeProgress(ctx: ProgressContext) {
       participations.map(async (participation) => {
         const challenge = participation.challenge
         switch (challenge.type) {
-          case "VOLUME":    return calcVolume(ctx.userId, challenge.startDate, now)
-          case "FREQUENCY": return calcFrequency(ctx.userId, challenge.startDate, now)
-          case "STREAK":    return calcStreak(ctx.userId)
-          case "PR":        return calcPRs(ctx.userId, challenge.startDate, now)
-          case "DISTANCE":  return calcDistance(ctx.userId, challenge.startDate, now)
-          case "CUSTOM":    return null
+          case "VOLUME":            return calcVolume(ctx.userId, challenge.startDate, now)
+          case "FREQUENCY":         return calcFrequency(ctx.userId, challenge.startDate, now)
+          case "STREAK":            return calcStreak(ctx.userId)
+          case "PR":                return calcPRs(ctx.userId, challenge.startDate, now)
+          case "DISTANCE":          return calcDistance(ctx.userId, challenge.startDate, now)
+          case "SLEEP_STREAK":      return calcSleepStreak(ctx.userId, challenge.startDate, now)
+          case "MOOD_STREAK":       return calcMoodStreak(ctx.userId, challenge.startDate, now)
+          case "BREATHING_MINUTES": return calcBreathingMinutes(ctx.userId, challenge.startDate, now)
+          case "READINESS_AVG":     return calcReadinessAvg(ctx.userId, challenge.startDate, now)
+          case "CUSTOM":            return null
+          default:
+            console.warn(`Unknown challenge type: ${challenge.type}`)
+            return null
         }
       })
     )
@@ -242,6 +249,64 @@ async function calcDistance(userId: string, since: Date, until: Date): Promise<n
     _sum: { distanceKm: true },
   })
   return Math.round((result._sum.distanceKm ?? 0) * 100) / 100
+}
+
+// ─── Wellness challenge calculators ─────────────────
+
+async function calcSleepStreak(userId: string, since: Date, until: Date): Promise<number> {
+  const logs = await prisma.sleepLog.findMany({
+    where: { userId, date: { gte: since, lte: until } },
+    orderBy: { date: "asc" },
+    select: { date: true },
+  })
+  if (logs.length === 0) return 0
+
+  let maxStreak = 1, current = 1
+  for (let i = 1; i < logs.length; i++) {
+    const prev = new Date(logs[i - 1].date)
+    const curr = new Date(logs[i].date)
+    const diff = (curr.getTime() - prev.getTime()) / (1000 * 60 * 60 * 24)
+    if (Math.round(diff) === 1) { current++; maxStreak = Math.max(maxStreak, current) }
+    else current = 1
+  }
+  return maxStreak
+}
+
+async function calcMoodStreak(userId: string, since: Date, until: Date): Promise<number> {
+  const logs = await prisma.moodLog.findMany({
+    where: { userId, loggedAt: { gte: since, lte: until } },
+    orderBy: { loggedAt: "asc" },
+    select: { loggedAt: true },
+  })
+  if (logs.length === 0) return 0
+
+  // Group by date, then calculate consecutive days
+  const dates = [...new Set(logs.map((l) => l.loggedAt.toISOString().split("T")[0]))].sort()
+  let maxStreak = 1, current = 1
+  for (let i = 1; i < dates.length; i++) {
+    const prev = new Date(dates[i - 1] + "T00:00:00Z")
+    const curr = new Date(dates[i] + "T00:00:00Z")
+    const diff = (curr.getTime() - prev.getTime()) / (1000 * 60 * 60 * 24)
+    if (diff === 1) { current++; maxStreak = Math.max(maxStreak, current) }
+    else current = 1
+  }
+  return maxStreak
+}
+
+async function calcBreathingMinutes(userId: string, since: Date, until: Date): Promise<number> {
+  const result = await prisma.breathingSession.aggregate({
+    where: { userId, createdAt: { gte: since, lte: until } },
+    _sum: { durationSec: true },
+  })
+  return Math.round((result._sum.durationSec ?? 0) / 60)
+}
+
+async function calcReadinessAvg(userId: string, since: Date, until: Date): Promise<number> {
+  const result = await prisma.readinessScore.aggregate({
+    where: { userId, date: { gte: since, lte: until } },
+    _avg: { score: true },
+  })
+  return Math.round(result._avg.score ?? 0)
 }
 
 // ─── MILESTONE: primer lugar gana ───────────────────

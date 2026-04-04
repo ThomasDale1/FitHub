@@ -17,7 +17,7 @@ const openai = new OpenAI({
 })
 
 // Construir el contexto del usuario para la IA
-async function buildUserContext(userId: string, clientDate?: string): Promise<string> {
+async function buildUserContext(userId: string, clientDate?: string, clientHour?: number): Promise<string> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
@@ -87,6 +87,45 @@ async function buildUserContext(userId: string, clientDate?: string): Promise<st
     },
   })
 
+  // ─── Wellness data ──────────────────────────────────
+  const todayStart = new Date(todayStr + "T00:00:00.000Z")
+  const todayEnd = new Date(todayStart)
+  todayEnd.setDate(todayEnd.getDate() + 1)
+
+  const sevenDaysAgo = new Date(todayStart)
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+
+  const oneDayAgo = new Date(todayStart)
+  oneDayAgo.setDate(oneDayAgo.getDate() - 1)
+
+  const [readinessToday, sleepRecent, moodRecent, sorenessToday, breathingRecent] = await Promise.all([
+    prisma.readinessScore.findUnique({
+      where: { userId_date: { userId, date: todayStart } },
+      select: { score: true, zone: true, recommendation: true, sleepComponent: true, moodComponent: true, stressComponent: true, loadComponent: true, sorenessComponent: true },
+    }),
+    prisma.sleepLog.findFirst({
+      where: { userId, date: { gte: oneDayAgo } },
+      orderBy: { date: "desc" },
+      select: { durationMinutes: true, sleepScore: true, quality: true },
+    }),
+    prisma.moodLog.findMany({
+      where: { userId, loggedAt: { gte: sevenDaysAgo } },
+      orderBy: { loggedAt: "desc" },
+      take: 5,
+      select: { mood: true, energy: true, stress: true, loggedAt: true },
+    }),
+    prisma.sorenessLog.findFirst({
+      where: { userId, date: { gte: oneDayAgo } },
+      orderBy: { date: "desc" },
+      select: { overallSoreness: true, muscleData: true },
+    }),
+    prisma.breathingSession.findMany({
+      where: { userId, createdAt: { gte: sevenDaysAgo } },
+      select: { technique: true, durationSec: true },
+      take: 10,
+    }),
+  ])
+
   // Formatear contexto
   let context = `DATOS DEL USUARIO:\n`
   context += `- Nombre: ${user?.name || "No especificado"}\n`
@@ -118,10 +157,22 @@ async function buildUserContext(userId: string, clientDate?: string): Promise<st
   }
 
   const parsedClientDate = clientDate ? new Date(clientDate) : null
-  const clientHour = parsedClientDate && !Number.isNaN(parsedClientDate.getTime())
-    ? parsedClientDate.getHours()
-    : new Date().getHours()
-
+  let extractedClientHour: number
+  
+  // Use explicit clientHour if provided, otherwise derive from ISO datetime string
+  if (typeof clientHour === "number" && clientHour >= 0 && clientHour < 24) {
+    extractedClientHour = clientHour
+  } else if (clientDate && clientDate.includes("T") && !Number.isNaN(new Date(clientDate).getTime())) {
+    // ISO datetime string provided
+    // Note: getHours() uses server timezone; consider requiring clientHour for accuracy
+    extractedClientHour = new Date(clientDate).getHours()
+  } else if (parsedClientDate && !Number.isNaN(parsedClientDate.getTime())) {
+    // Date-only string - fall back to server time since UTC hours would be 0
+    extractedClientHour = new Date().getHours()
+  } else {
+    // Fallback to server time
+    extractedClientHour = new Date().getHours()
+  }
   if (todayNutrition) {
     context += `NUTRICIÓN HOY:\n`
     context += `- Calorías: ${todayNutrition.totalCalories}/${todayNutrition.calorieGoal} kcal\n`
@@ -129,10 +180,55 @@ async function buildUserContext(userId: string, clientDate?: string): Promise<st
     context += `- Carbos: ${todayNutrition.totalCarbs}g/${user?.carbsGoal ?? 250}g meta\n`
     context += `- Grasa: ${todayNutrition.totalFat}g/${user?.fatGoal ?? 65}g meta\n`
     context += `- Agua: ${todayNutrition.waterMl}/${todayNutrition.waterGoalMl}ml\n`
-    context += `- Hora actual: ${clientHour}:00\n`
+    context += `- Hora actual: ${extractedClientHour}:00\n`
   } else {
     context += `NUTRICIÓN HOY: Sin registros aún\n`
-    context += `- Hora actual: ${clientHour}:00\n`
+    context += `- Hora actual: ${extractedClientHour}:00\n`
+  }
+
+  // ─── Wellness / Bienestar ─────────────────────────
+  context += "\nBIENESTAR:\n"
+
+  if (readinessToday) {
+    const zoneLabel = readinessToday.zone === "GREEN" ? "Verde (buena)" : readinessToday.zone === "YELLOW" ? "Amarilla (moderada)" : "Roja (baja)"
+    context += `- Readiness hoy: ${readinessToday.score}/100 (zona ${zoneLabel})\n`
+    context += `  Componentes: Sueño ${readinessToday.sleepComponent}/35, Ánimo ${readinessToday.moodComponent}/20, Estrés ${readinessToday.stressComponent}/15, Carga ${readinessToday.loadComponent}/20, Soreness ${readinessToday.sorenessComponent}/10\n`
+    if (readinessToday.recommendation) context += `  Recomendación: ${readinessToday.recommendation}\n`
+  } else {
+    context += `- Readiness hoy: No calculado aún\n`
+  }
+
+  if (sleepRecent) {
+    const h = Math.floor(sleepRecent.durationMinutes / 60)
+    const m = sleepRecent.durationMinutes % 60
+    context += `- Sueño anoche: ${h}h${String(m).padStart(2, "0")} (score ${sleepRecent.sleepScore ?? "N/A"}/100, calidad ${sleepRecent.quality}/5)\n`
+  } else {
+    context += `- Sueño anoche: Sin registro\n`
+  }
+
+  if (moodRecent.length > 0) {
+    const latest = moodRecent[0]
+    context += `- Último mood: ánimo ${latest.mood}/5, energía ${latest.energy}/5, estrés ${latest.stress}/5\n`
+    if (moodRecent.length >= 3) {
+      const avgMood = (moodRecent.reduce((s, m) => s + m.mood, 0) / moodRecent.length).toFixed(1)
+      const avgEnergy = (moodRecent.reduce((s, m) => s + m.energy, 0) / moodRecent.length).toFixed(1)
+      context += `  Promedios últimos ${moodRecent.length} registros: ánimo ${avgMood}, energía ${avgEnergy}\n`
+    }
+  }
+
+  if (sorenessToday) {
+    const sorenessLabels = ["Nada", "Mínimo", "Leve", "Moderado", "Alto", "Intenso"]
+    context += `- Soreness: ${sorenessLabels[sorenessToday.overallSoreness]} (${sorenessToday.overallSoreness}/5)\n`
+    if (sorenessToday.muscleData && typeof sorenessToday.muscleData === "object") {
+      const muscles = sorenessToday.muscleData as Record<string, number>
+      const sore = Object.entries(muscles).filter(([, v]) => v >= 3).map(([k, v]) => `${k}(${v})`)
+      if (sore.length > 0) context += `  Músculos más adoloridos: ${sore.join(", ")}\n`
+    }
+  }
+
+  if (breathingRecent.length > 0) {
+    const totalMin = Math.round(breathingRecent.reduce((s, b) => s + b.durationSec, 0) / 60)
+    context += `- Respiración última semana: ${breathingRecent.length} sesiones, ${totalMin} min total\n`
   }
 
   return context
@@ -151,8 +247,12 @@ const SYSTEM_PROMPT = `Eres el AI Coach de Fit Hub, una app de fitness. Tu perso
 - Mantienes las respuestas concisas (máximo 200 palabras a menos que pidan detalle)
 - Si el usuario pregunta algo médico serio, recomiendas consultar un profesional
 
-IMPORTANTE: Tienes acceso al historial de entrenamiento, PRs y nutrición del usuario. 
-Úsalos para dar consejos personalizados y específicos.`
+IMPORTANTE: Tienes acceso al historial de entrenamiento, PRs, nutrición Y bienestar del usuario (readiness, sueño, ánimo, estrés, soreness, respiración).
+Úsalos para dar consejos personalizados y específicos.
+- Si el readiness está en zona ROJA, recomienda descanso o recovery activa
+- Si el sueño es < 6h, sugiérelo como prioridad
+- Si el estrés es alto (4-5), recomienda respiración o journaling
+- Relaciona el bienestar con el entrenamiento: "dormiste poco → baja la intensidad hoy"`
 
 // ═══════════════════════════════════════════════════════
 // POST /api/ai/chat — Enviar mensaje al AI Coach
@@ -163,7 +263,7 @@ router.post("/chat", async (req: Request, res: Response) => {
     const user = await getUserByClerkId(clerkId!)
     if (!user) { res.status(404).json({ error: "Usuario no encontrado" }); return }
 
-    const { message, clientDate } = req.body
+    const { message, clientDate, clientHour } = req.body
 
     if (!message || typeof message !== "string") {
       res.status(400).json({ error: "message es requerido" })
@@ -187,7 +287,11 @@ router.post("/chat", async (req: Request, res: Response) => {
     chatHistory.reverse()
 
     // Construir contexto del usuario
-    const userContext = await buildUserContext(user.id, typeof clientDate === "string" ? clientDate : undefined)
+    const userContext = await buildUserContext(
+      user.id,
+      typeof clientDate === "string" ? clientDate : undefined,
+      typeof clientHour === "number" ? clientHour : undefined
+    )
 
     // Llamar a OpenAI
     const completion = await openai.chat.completions.create({

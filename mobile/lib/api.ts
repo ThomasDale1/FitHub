@@ -1223,3 +1223,224 @@ export const stepsAPI = {
     return api.put("/api/steps/goal", { goal, date });
   },
 };
+
+// ─── Wellness API ─────────────────────────────────────
+export interface WellnessDashboard {
+  readiness: {
+    score: number;
+    zone: "RED" | "YELLOW" | "GREEN";
+    recommendation: string;
+    components: {
+      sleep: number;
+      mood: number;
+      stress: number;
+      load: number;
+      soreness: number;
+    };
+  };
+  sleep: {
+    score: number | null;
+    duration: number;
+    bedTime: string;
+    wakeTime: string;
+    quality: number;
+  } | null;
+  mood: {
+    mood: number;
+    energy: number;
+    stress: number;
+    loggedAt: string;
+  } | null;
+  sleepHistory: {
+    date: string;
+    duration: number;
+    score: number | null;
+    quality: number;
+  }[];
+  streaks: {
+    journaling: number;
+  };
+}
+
+// ─── Insight types ──────────────────────────────────
+export interface WellnessInsight {
+  id: string;
+  category: string;
+  priority: "HIGH" | "MEDIUM" | "LOW";
+  title: string;
+  body: string;
+  emoji: string;
+  color: string;
+  actionLabel?: string;
+  actionRoute?: string;
+}
+
+export interface WeeklyReportData {
+  period: { start: string; end: string };
+  summary: {
+    avgReadiness: number;
+    avgSleep: number;
+    avgMood: number;
+    avgEnergy: number;
+    avgStress: number;
+    totalWorkouts: number;
+    totalVolume: number;
+    totalBreathingMin: number;
+    journalEntries: number;
+  };
+  trends: {
+    readiness: "UP" | "DOWN" | "STABLE";
+    sleep: "UP" | "DOWN" | "STABLE";
+    mood: "UP" | "DOWN" | "STABLE";
+    volume: "UP" | "DOWN" | "STABLE";
+  };
+  topInsight: string;
+  highlights: string[];
+}
+
+// ─── Training Suggestion types ──────────────────────
+export interface TrainingSuggestion {
+  readiness: { score: number; zone: "RED" | "YELLOW" | "GREEN" };
+  suggestion: {
+    intensity: "REST" | "LIGHT" | "MODERATE" | "HIGH" | "MAX";
+    emoji: string;
+    title: string;
+    description: string;
+    recommendations: string[];
+    avoidMuscles: string[];
+    suggestedDuration: number;
+    suggestedRPE: { min: number; max: number };
+  };
+}
+
+// ─── Nutrition Adjustment types ─────────────────────
+export interface NutritionAdjustment {
+  readiness: { score: number; zone: "RED" | "YELLOW" | "GREEN" };
+  adjustment: {
+    emoji: string;
+    title: string;
+    description: string;
+    calories: { base: number; adjusted: number; delta: number };
+    protein: { base: number; adjusted: number; delta: number };
+    carbs: { base: number; adjusted: number; delta: number };
+    fat: { base: number; adjusted: number; delta: number };
+    tips: string[];
+  };
+}
+
+export const wellnessAPI = {
+  // Dashboard
+  getDashboard: () => {
+    const today = new Date().toLocaleDateString("en-CA")
+    return api.get<{ data: WellnessDashboard }>(`/api/wellness/dashboard?today=${today}`)
+  },
+
+  // Mood
+  logMood: (data: {
+    mood: number;
+    energy: number;
+    stress: number;
+    note?: string;
+    context?: "STANDALONE" | "PRE_WORKOUT" | "POST_WORKOUT";
+    workoutId?: string;
+  }) => api.post("/api/wellness/mood", data),
+
+  getMoodToday: () => {
+    const today = new Date().toLocaleDateString("en-CA")
+    return api.get(`/api/wellness/mood/today?today=${today}`)
+  },
+
+  getMoodHistory: () => api.get("/api/wellness/mood/history"),
+
+  // Sleep
+  logSleep: (data: {
+    bedTime: string;
+    wakeTime: string;
+    quality?: number;
+    awakenings?: number;
+    date?: string;
+    notes?: string;
+  }) => api.post("/api/wellness/sleep", data),
+
+  getSleepToday: () => {
+    const today = new Date().toLocaleDateString("en-CA")
+    return api.get(`/api/wellness/sleep/today?today=${today}`)
+  },
+
+  getSleepHistory: (days?: number) =>
+    api.get(`/api/wellness/sleep/history${days ? `?days=${days}` : ""}`),
+
+  // Readiness
+  getReadiness: () => {
+    const today = new Date().toLocaleDateString("en-CA")
+    return api.get(`/api/wellness/readiness?today=${today}`)
+  },
+
+  getReadinessHistory: () => api.get("/api/wellness/readiness/history"),
+
+  // Breathing
+  logBreathing: (data: {
+    technique: string;
+    durationSec: number;
+    targetSec?: number;
+    completed?: boolean;
+    moodBefore?: number;
+    moodAfter?: number;
+  }) => api.post("/api/wellness/breathing", data),
+
+  getBreathingHistory: (days?: number) =>
+    api.get(`/api/wellness/breathing/history${days ? `?days=${days}` : ""}`),
+
+  // Journal
+  createJournal: (data: {
+    content: string;
+    type?: "FREE" | "GRATITUDE" | "REFLECTION" | "PRE_WORKOUT";
+    mood?: number;
+    tags?: string[];
+  }) => api.post("/api/wellness/journal", data),
+
+  getJournalEntries: (days?: number, limit?: number) => {
+    const params = new URLSearchParams();
+    if (days) params.set("days", String(days));
+    if (limit) params.set("limit", String(limit));
+    const qs = params.toString();
+    return api.get(`/api/wellness/journal${qs ? `?${qs}` : ""}`);
+  },
+
+  deleteJournal: (id: string) => api.delete(`/api/wellness/journal/${id}`),
+
+  // Soreness
+  logSoreness: (data: {
+    muscleData: Record<string, number>;
+    overallSoreness: number;
+    notes?: string;
+  }) => api.post("/api/wellness/soreness", data),
+
+  getSorenessToday: () => {
+    const today = new Date().toLocaleDateString("en-CA")
+    return api.get(`/api/wellness/soreness/today?today=${today}`)
+  },
+
+  getSorenessHistory: (days?: number) =>
+    api.get(`/api/wellness/soreness/history${days ? `?days=${days}` : ""}`),
+
+  // Insights
+  getInsights: () =>
+    api.get<{ data: WellnessInsight[] }>("/api/wellness/insights"),
+
+  // Weekly Report
+  getWeeklyReport: () =>
+    api.get<{ data: WeeklyReportData }>("/api/wellness/weekly-report"),
+
+  // Push Reminders (trigger manually)
+  sendReminders: () =>
+    api.post("/api/wellness/send-reminders"),
+
+  // Training Suggestion (readiness → intensity)
+  getTrainingSuggestion: () =>
+    api.get<{ data: TrainingSuggestion }>("/api/wellness/training-suggestion"),
+
+  // Nutrition Adjustment (readiness → macros)
+  getNutritionAdjustment: () =>
+    api.get<{ data: NutritionAdjustment }>("/api/wellness/nutrition-adjustment"),
+};
