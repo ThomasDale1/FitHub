@@ -100,7 +100,7 @@ export function generateWeeklyReport(
   const avgEnergy = avg(thisWeek.moodLogs.map((m) => m.energy))
   const avgStress = avg(thisWeek.moodLogs.map((m) => m.stress))
   const totalWorkouts = thisWeek.workouts.length
-  const totalVolume = thisWeek.workouts.reduce((s, w) => s + w.totalVolume, 0)
+  const totalVolume = thisWeek.workouts.reduce((s, w) => s + (w.totalVolume || 0), 0)
   const totalBreathingMin = Math.round(
     thisWeek.breathingSessions.reduce((s, b) => s + b.durationSec, 0) / 60
   )
@@ -110,7 +110,7 @@ export function generateWeeklyReport(
   const prevAvgReadiness = avg(prevWeek.readinessScores.map((r) => r.score))
   const prevAvgSleep = avg(prevWeek.sleepLogs.map((s) => s.durationMinutes))
   const prevAvgMood = avg(prevWeek.moodLogs.map((m) => m.mood))
-  const prevTotalVolume = prevWeek.workouts.reduce((s, w) => s + w.totalVolume, 0)
+  const prevTotalVolume = prevWeek.workouts.reduce((s, w) => s + (w.totalVolume || 0), 0)
 
   // ─── Compute trends ────────────────────────────────
   const trend = (curr: number, prev: number, threshold = 0.05): "UP" | "DOWN" | "STABLE" => {
