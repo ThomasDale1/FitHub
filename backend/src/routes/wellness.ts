@@ -339,7 +339,9 @@ router.get("/readiness/history", async (req: Request, res: Response) => {
 router.get("/dashboard", async (req: Request, res: Response) => {
   try {
     const { userId: clerkId } = getAuth(req)
-    const user = await getUserByClerkId(clerkId!)
+    if (!clerkId) { res.status(401).json({ error: "Unauthorized" }); return }
+
+    const user = await getUserByClerkId(clerkId)
     if (!user) { res.status(404).json({ error: "Usuario no encontrado" }); return }
 
     const today = todayDate()
@@ -381,10 +383,15 @@ router.get("/dashboard", async (req: Request, res: Response) => {
     // Calcular readiness si no existe
     let readiness = readinessExisting
     if (!readiness) {
-      const result = await computeReadinessForUser(user.id, today)
-      readiness = await prisma.readinessScore.create({
-        data: { userId: user.id, date: today, ...result },
-      })
+      try {
+        const result = await computeReadinessForUser(user.id, today)
+        readiness = await prisma.readinessScore.create({
+          data: { userId: user.id, date: today, ...result },
+        })
+      } catch (readinessErr) {
+        console.error("[dashboard] Error computing readiness:", readinessErr instanceof Error ? readinessErr.message : String(readinessErr))
+        throw readinessErr
+      }
     }
 
     // Calcular journal streak
@@ -443,8 +450,12 @@ router.get("/dashboard", async (req: Request, res: Response) => {
       },
     })
   } catch (err) {
-    console.error("Error fetching wellness dashboard:", err)
-    res.status(500).json({ error: "Error interno" })
+    const errorMsg = err instanceof Error ? err.message : String(err)
+    console.error("[dashboard] Endpoint error:", errorMsg.substring(0, 150))
+    res.status(500).json({ 
+      error: "Error fetching wellness data",
+      code: "WELLNESS_DASHBOARD_ERROR"
+    })
   }
 })
 
