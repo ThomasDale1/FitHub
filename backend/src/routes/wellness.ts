@@ -385,8 +385,10 @@ router.get("/dashboard", async (req: Request, res: Response) => {
     if (!readiness) {
       try {
         const result = await computeReadinessForUser(user.id, today)
-        readiness = await prisma.readinessScore.create({
-          data: { userId: user.id, date: today, ...result },
+        readiness = await prisma.readinessScore.upsert({
+          where: { userId_date: { userId: user.id, date: today } },
+          update: result,
+          create: { userId: user.id, date: today, ...result },
         })
       } catch (readinessErr) {
         console.error("[dashboard] Error computing readiness:", readinessErr instanceof Error ? readinessErr.message : String(readinessErr))
