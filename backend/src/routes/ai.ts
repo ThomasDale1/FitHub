@@ -399,7 +399,7 @@ router.post("/quick", async (req: Request, res: Response) => {
     const user = await getUserByClerkId(clerkId!)
     if (!user) { res.status(404).json({ error: "Usuario no encontrado" }); return }
 
-    const { type, clientDate: quickClientDate } = req.body // "workout_suggestion" | "nutrition_tip" | "motivation" | "recovery"
+    const { type, clientDate: quickClientDate, clientHour: quickClientHour } = req.body // "workout_suggestion" | "nutrition_tip" | "motivation" | "recovery"
 
     const prompts: Record<string, string> = {
       workout_suggestion: "Basándote en mis últimos workouts, ¿qué debería entrenar hoy? Dame un plan concreto con ejercicios, series y repeticiones.",
@@ -421,7 +421,11 @@ router.post("/quick", async (req: Request, res: Response) => {
       data: { userId: user.id, role: "user", content: message },
     })
 
-    const userContext = await buildUserContext(user.id)
+    const userContext = await buildUserContext(
+      user.id,
+      typeof quickClientDate === "string" ? quickClientDate : undefined,
+      typeof quickClientHour === "number" ? quickClientHour : undefined
+    )
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
