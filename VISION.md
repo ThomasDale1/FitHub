@@ -811,17 +811,16 @@ GET https://world.openfoodfacts.org/api/v2/product/{barcode}.json
 #### Features en schema/backend SIN UI (prioridad inmediata)
 
 **Workout Templates** — modelo `WorkoutTemplate` + `TemplateSet` existen en Prisma, endpoints en backend, pero NO hay UI para crearlos/cargarlos.
-- [ ] ⚡ Pantalla de mis plantillas en `workout.tsx`
-- [ ] Crear plantilla desde workout completado ("Guardar como plantilla")
+- [ ] Crear plantilla sin haber completado un workout ("Guardar como plantilla")
 - [ ] Cargar plantilla → iniciar workout pre-cargado con ejercicios y sets
-- [ ] Plantillas predefinidas del sistema: PPL, Upper/Lower, Full Body, 5/3/1, GZCLP
+- [ ] Plantillas predefinidas por IA según tus objetivos, días experiencia, etc
 - [ ] Compartir plantilla con la comunidad (campo `isPublic` ya existe)
 
 **Custom Exercises** — modelo `CustomExercise` existe en Prisma, pero NO hay UI.
 - [ ] Botón "+ Crear ejercicio" en el exercise picker
 - [ ] Form: nombre, grupo muscular, equipo, instrucciones, músculos secundarios
 - [ ] Foto/GIF del ejercicio propio (upload a Cloudinary)
-- [ ] Marcar como público para compartir con la comunidad
+- [ ] No debe alterar el dataset de los Exercises en mi DB
 
 **Personal Records — visualización**
 - [ ] ⚡ Widget de "Últimos PRs" en dashboard (última semana)
@@ -839,6 +838,7 @@ GET https://world.openfoodfacts.org/api/v2/product/{barcode}.json
 - [ ] **1RM estimado inline** — calcular y mostrar mientras el usuario logea (fórmula Epley)
 - [ ] **Calor de músculos** — mostrar qué músculos has entrenado hoy con un bodymap simple
 - [ ] **Modo no molestar** — desactivar notificaciones automáticamente durante workout activo
+- [ ] **Dar insigths sobre la fatiga acumulada**
 
 #### Mejoras al Workout Summary (`workout/summary.tsx`)
 - [ ] **Desglose de ejercicios** — lista de todos los ejercicios: sets × reps × peso
@@ -914,7 +914,7 @@ GET https://world.openfoodfacts.org/api/v2/product/{barcode}.json
 ### 🏆 Retos y Gamificación
 
 #### Challenges
-- [ ] **UI de creación de challenges** — backend existe pero no hay pantalla para crearlos desde mobile
+- [ ] **UI de creación de challenges** — mejora de la pantalla, que pueda ser publico o privado, si es por meta que no exista duracion y sea objetivo, pero si es por duracion, quita objetivo y agrega el tiempo de duracion y ganará el que mas haya hecho. Tambien agrega capacidad de participantes
 - [ ] **Invitaciones a challenge privado** — enviar invitación a amigos específicos
 - [ ] **Challenges de equipo** — grupos de 2-5 personas compitiendo como equipo
 - [ ] **Challenges temáticos de temporada** — "Reto de Enero: 100k pasos", "Verano Shred: -5% BF"
@@ -1535,22 +1535,556 @@ Ideas más ambiciosas que requieren tecnología madura o inversión mayor.
 | 40 | Preview de tu posición en ranking antes de empezar el workout | `workout.tsx` | 1h |
 
 
-Fase 2 — Engagement Layer
-Breathing exercises (UI animada + registro)
-Journaling (UI + almacenamiento)
-DOMS tracking (body map)
-Recovery protocols (checklists)
-Fase 3 — Intelligence
-Motor de correlaciones/insights
-Integración con AI Coach (contexto wellness)
-Weekly Wellness Report
-Push notifications de wellness
-Fase 4 — Gamification + Polish
-Badges de WELLNESS
-Wellness challenges
-Readiness → workout intensity suggestions
-Readiness → nutrition adjustments
-Microinteracciones, animaciones, sonido
-Ese es el diseño completo del sistema. Cada pieza está pensada para conectarse con lo que ya existe (muscleStimulus, badges, AI Coach, nutrition, steps) y el modelo de scoring tiene fallbacks para funcionar con datos parciales desde el día 1.
+FITHUB — TAB SOCIAL: DISEÑO DE PRODUCTO COMPLETO
+NAMING FINAL: "GUILD" (en español: GREMIO)
+¿Por qué "Guild" y no "Tribu", "Clan" o "Crew"?
 
-¿Quieres que empiece con la Fase 1 (modelos Prisma + Readiness Engine + Wellness Tab UI)? Dime si quieres ajustar algo del diseño antes de codear.
+Opción	Problema
+Tribu	Demasiado genérico, usado en marketing corporativo
+Clan	Connota exclusividad tóxica (Clash of Clans lo quemó)
+Crew	Suena casual, sin peso emocional
+Guild	Connota artesanía, esfuerzo compartido, jerarquía con propósito, identidad medieval-gamer. Se traduce bien a español ("Gremio") pero la comunidad fitness ya usa anglicismos. Suena épico sin ser cringe
+Naming del tab: Discover | Guilds
+
+1. ARQUITECTURA COMPLETA DEL TAB SOCIAL
+
+┌─────────────────────────────────────────────┐
+│  TAB SOCIAL                                 │
+│  ┌──────────────┬──────────────┐            │
+│  │  Discover    │   Guilds     │            │
+│  └──────┬───────┴──────┬───────┘            │
+│         │              │                    │
+│    ┌────▼────┐    ┌────▼──────────────┐     │
+│    │Smart    │    │My Guilds (max 3)  │     │
+│    │Matching │    │  └─ Guild HQ      │     │
+│    │Feed     │    │     ├─ Pulse      │     │
+│    │         │    │     ├─ Arena      │     │
+│    │Sections:│    │     ├─ Members    │     │
+│    │• Same   │    │     ├─ Stats      │     │
+│    │  Gym    │    │     └─ History    │     │
+│    │• Your   │    │                   │     │
+│    │  Level  │    │Browse Guilds      │     │
+│    │• Rising │    │  ├─ Nearby        │     │
+│    │  Stars  │    │  ├─ Trending      │     │
+│    │• Ghost  │    │  └─ By Category   │     │
+│    │  Match  │    │                   │     │
+│    └─────────┘    └───────────────────┘     │
+└─────────────────────────────────────────────┘
+2. SUB-TAB: DISCOVER — DISEÑO DETALLADO
+Filosofía
+No es un feed de "gente random". Es un sistema de matching con contexto explicado — cada card responde: "¿por qué debería importarme esta persona?"
+
+Secciones (scroll vertical, carouseles horizontales)
+2.1 — "ENTRENAN EN TU GYM" (Máxima prioridad)
+Psicología: Proximidad física = mayor probabilidad de conexión real. La gente quiere saber quién entrena a su lado.
+
+Card design:
+
+
+┌──────────────────────────────┐
+│  [Avatar]  María G. · Lv 14 │
+│  🔥 23 días de racha         │
+│                              │
+│  ⚡ "Entrenan en SmartFit     │
+│     Condesa"                 │
+│  🏋️ "También hace piernas    │
+│     3x por semana"           │
+│                              │
+│  [Seguir]     [Ver perfil]   │
+└──────────────────────────────┘
+Señales que alimentan el "por qué":
+
+Mismo gimnasio (del modelo Place + UserPlace que ya existe)
+Hobbies compartidos (del modelo UserHobby)
+Horarios similares de entrenamiento (derivado de Workout.createdAt)
+Racha similar (± 5 días)
+Regla clave: Siempre mostrar mínimo 2 razones por card. Si solo hay una, no mostrar en esta sección premium — mover a sección genérica.
+
+Retención: Convierte la app en un puente hacia la vida real. "Vi que entrenas aquí, ¿hacemos pierna juntos?" — esto es lo que diferencia a FitHub de MyFitnessPal.
+
+2.2 — "TU NIVEL" (Personas en ±2 niveles del usuario)
+Psicología: Comparación lateral. No quieres ver al nivel 47 — quieres ver al nivel 13 cuando tú eres 12. Eso genera competencia accesible.
+
+Card design: Similar pero el tag dice:
+
+"Nivel 13 · Solo 1 nivel arriba"
+"Misma experiencia: Intermedio"
+"Racha similar: 18 días"
+Señal emocional: "Esta persona es como yo pero ligeramente mejor" → quiero alcanzarla.
+
+2.3 — "RISING STARS" (Crecimiento reciente explosivo)
+Psicología: Aspiración + FOMO. Mostrar gente que estaba inactiva y ahora está on fire.
+
+Criterio: Usuarios cuyo XP ganado en los últimos 7 días es >2x su promedio semanal histórico.
+
+Tag: "Subió 3 niveles esta semana" / "Racha nueva: de 0 a 14 días"
+
+Por qué funciona: Genera la narrativa de "comeback" que es universalmente motivadora. Si ella pudo, yo puedo.
+
+2.4 — "GHOST MATCH" (Controversial, high-retention)
+Psicología: Presión social ligera + accountability.
+
+Muestra personas con stats casi idénticas a las tuyas:
+
+Mismo nivel
+Racha similar
+Volumen de entrenamiento similar
+Mismo gym o misma ciudad
+Tag: "Tu Ghost — stats casi idénticas"
+
+El twist: La app trackea silenciosamente quién de los dos avanza más y manda micro-notificaciones:
+
+"Tu Ghost entrenó hoy. ¿Y tú?"
+"Le sacaste 2 días de racha a tu Ghost"
+Límite: Máximo 1 Ghost a la vez. Se reasigna cada 30 días. El usuario puede opt-out.
+
+Retención: Crea un rival invisible que genera accountability sin toxicidad directa. Strava lo hace con segmentos; FitHub lo hace con personas.
+
+Discover — Señales de Matching (expansión del scoring actual)
+Tu endpoint actual en users.ts:525 ya calcula scores. Propongo expandir las señales:
+
+Señal	Score	Ya existe	Nueva
+Mismo gym	+40	✅	—
+Hobbies compartidos	+20/each	✅	—
+Edad similar (±5)	+10	✅	—
+Mismo nivel exp	+10	✅	—
+Avatar presente	+5	✅	—
+Racha similar (±5 días)	+15	—	✅
+Horario similar	+25	—	✅
+Amigos en común (follows mutuos)	+30	—	✅
+Mismo nivel ±2	+10	—	✅
+Volumen semanal similar	+10	—	✅
+Regla de "razones": El backend debe retornar un array matchReasons[] con strings legibles:
+
+
+matchReasons: [
+  "Entrenan en SmartFit Condesa",
+  "Racha similar: 21 vs 18 días",
+  "Ambos entrenan entre 6-8 AM"
+]
+Esto ya lo haces parcialmente con sharedHobbies y sameGym. Solo hay que formalizarlo como array de strings.
+
+3. SUB-TAB: GUILDS — EL CORE DEL SISTEMA
+3.1 — TIPOS DE GUILD
+Tipo	Creación	Propósito	Icono
+Forge Guild (Gym)	Automática al registrar gym	"Tu casa base". Todos los del gym están aquí	⚒️
+War Party (Privada)	Manual, por invitación	Amigos cercanos, accountability squad	⚔️
+Open Guild (Pública)	Manual, cualquiera se une	Temática: "Runners CDMX", "PowerLifters MX"	🏟️
+3.2 — REGLAS DE AFILIACIÓN (Escasez = Identidad)
+1 Forge Guild obligatoria (tu gym principal)
+Máximo 2 Guilds adicionales (War Party u Open Guild)
+Total: 3 guilds máximo
+Psicología de la escasez: Si puedes estar en 50 grupos, ninguno importa. Si solo puedes estar en 3, cada uno se siente como una decisión identitaria. "Soy del Forge de SmartFit, y mi War Party es con mis compas de la uni." — Esto es identidad tribal real.
+
+3.3 — ROLES Y JERARQUÍA
+
+FOUNDER ────── Creador. Puede transferir ownership. 1 por guild.
+   │
+WARDEN ─────── Admin. Puede banear, aprobar, editar config. Máx 3.
+   │
+CAPTAIN ────── Moderador. Puede silenciar, reportar. Máx 5.
+   │
+MEMBER ─────── Miembro activo. Plenos derechos.
+   │
+RECRUIT ────── Periodo de prueba (7 días). Acceso limitado a stats.
+Psicología: Los nombres NO son genéricos (admin/mod/member). Usan vocabulario de guild RPG que refuerza la fantasía. "Me ascendieron a Captain" se siente como un logro real.
+
+Progresión automática:
+
+Recruit → Member: Automático a los 7 días SI mantuviste racha activa
+Member → Captain: Nominación del Warden, requiere racha ≥14 días
+Captain → Warden: Solo el Founder puede promover
+3.4 — GUILD HQ (Headquarters) — La Pantalla Principal
+Cuando entras a tu Guild, ves el HQ. No es un chat. No es un feed. Es un tablero de guerra vivo.
+
+4. STATS & GRÁFICAS — GUILD HQ (3 NIVELES)
+⚡ NIVEL 1 — PULSE (Above the fold, sin scroll)
+Diseño: Estilo "war room dashboard" — fondo oscuro, acentos neón, datos grandes.
+
+
+┌─────────────────────────────────────────────────┐
+│                                                 │
+│     ⚒️ SMARTFIT CONDESA                          │
+│     "Forged in Iron"  ← motto editable          │
+│                                                 │
+│  ┌─────────┐                                    │
+│  │  ◉◉◉◉   │   24 / 47 activos hoy             │
+│  │  ORB    │   Racha promedio: 16.3 días        │
+│  │ ANIMADO │   Ranking Nacional: #142            │
+│  └─────────┘                                    │
+│                                                 │
+│  ⚔️ GUERRA ACTIVA vs "Iron Temple Polanco"       │
+│  ███████████████░░░░  78% — Quedan 2 días       │
+│                                                 │
+└─────────────────────────────────────────────────┘
+El Activity Orb:
+
+Esfera que pulsa y cambia de color según actividad:
+Rojo intenso: >80% de miembros activos hoy
+Naranja: 50-80%
+Azul frío: <30%
+Gris: <10% (la guild está "dormida")
+Tiene partículas que se mueven más rápido con más actividad
+Se inspira en la estética de Solo Leveling (el portal de dungeon)
+Psicología: El orb es la primera cosa que ves. Si está frío, sientes presión. Si está en llamas, sientes orgullo. Es un termómetro emocional colectivo.
+
+Métricas del Pulse:
+
+Métrica	Por qué
+Activos hoy / Total	Presión social: "Solo falto yo"
+Racha promedio	Meta colectiva implícita
+Ranking Nacional	Orgullo tribal + competencia
+Banner de Guerra	Urgencia temporal
+📈 NIVEL 2 — ARENA (Scroll down — gráficas clave)
+4.2.1 — Ritmo de la Guild (Activity Wave)
+Tipo: Gráfica de área, 7 días, con gradiente.
+
+
+Workouts completados por día
+  12 │      ╱╲
+  10 │    ╱    ╲    ╱╲
+   8 │  ╱        ╲╱    ╲
+   6 │╱                  ╲
+     └──────────────────────
+      L   M   X   J   V   S   D
+Línea sólida: Tu guild
+Línea punteada: Promedio nacional de guilds del mismo tamaño
+Tap en día = muestra quiénes entrenaron
+Psicología: Visualizar el ritmo colectivo crea identidad narrativa. "Somos una guild de lunes a viernes" vs "Somos weekend warriors".
+
+4.2.2 — Consistency Heatmap (Estilo GitHub)
+
+       Sem1  Sem2  Sem3  Sem4
+  Lu   ██    ██    ██    ░░
+  Ma   ██    ██    ░░    ██
+  Mi   ██    ░░    ██    ██
+  Ju   ░░    ██    ██    ██
+  Vi   ██    ██    ██    ██
+  Sa   ░░    ░░    ██    ░░
+  Do   ░░    ░░    ░░    ░░
+Verde = >70% de miembros entrenaron ese día
+Amarillo = 40-70%
+Gris = <40%
+Psicología: Hace visible la consistencia colectiva. Los "huecos" se sienten como algo que la guild necesita arreglar juntos.
+
+4.2.3 — Streak Distribution (RPG Tiers)
+No muestres un simple bar chart. Divide a los miembros en tiers con nombres épicos:
+
+Tier	Racha	Visual
+🔥 Inferno	30+ días	Fuego dorado
+⚡ Surge	14-29 días	Rayo azul
+💪 Iron	7-13 días	Metal sólido
+🌱 Seedling	1-6 días	Verde suave
+💀 Fallen	0 días	Gris, cráneo
+Distribución visual: Barra horizontal segmentada con colores:
+
+
+  🔥 ████ 8    ⚡ ██████████ 18    💪 ████████ 14    🌱 ███ 5    💀 ██ 2
+Tap en cada tier = lista de nombres.
+
+Psicología:
+
+Nadie quiere ser "Fallen" 💀 — presión para mantener racha
+Ver que 8 personas son "Inferno" inspira aspiración
+Los nombres épicos convierten datos aburridos en narrativa de RPG
+4.2.4 — Volumen Total Levantado (War Meter)
+Tipo: Gauge / medidor estilo velocímetro industrial.
+
+
+     ESTA SEMANA: 42,350 kg
+     ┌────────────────────┐
+     │     ▲ 42.3K        │
+     │   ╱───╲            │
+     │  ╱     ╲           │
+     │ ╱   ↑   ╲          │
+     │ vs semana pasada:  │
+     │    +12% ↑          │
+     └────────────────────┘
+Comparación vs semana anterior (momentum)
+Highlight al miembro que más contribuyó esta semana ("MVP")
+4.2.5 — Pasos Colectivos (Odómetro)
+Tipo: Counter animado estilo odómetro de auto clásico.
+
+
+  PASOS HOY: 287,432
+  META DIARIA GUILD: 500,000
+  ██████████████░░░░░░ 57%
+Se actualiza "en tiempo real" (polling cada 5 min)
+Cuando llega a 100%: animación de celebración, XP para toda la guild
+Psicología: Meta colectiva diaria = razón para abrir la app y caminar más. "Nos faltan 50K pasos, voy a salir a caminar." — Accountability masivo.
+
+4.2.6 — GUILD RADAR (Atributo Hexagonal) — EL MÁS IMPORTANTE
+Tipo: Gráfica de radar/spider hexagonal.
+
+
+            Consistencia
+               ╱╲
+              ╱  ╲
+    Crecim.  ╱    ╲  Fuerza
+             │    │
+    Nutric.  ╲    ╱  Resistencia
+              ╲  ╱
+               ╲╱
+            Actividad
+Los 6 atributos y cómo se calculan:
+
+Atributo	Fuente de datos	Cálculo
+Consistencia	Rachas de miembros	Promedio de racha / 30 (normalizado 0-100)
+Fuerza	Volumen total levantado	Percentil vs todas las guilds del país
+Resistencia	Pasos + minutos de cardio	Promedio semanal per capita vs benchmark
+Actividad	Workouts completados / semana	Per capita vs promedio nacional
+Nutrición	Food logs registrados / semana	% de miembros que logean >3 días/semana
+Crecimiento	XP ganado últimas 4 semanas	Tendencia: ¿subiendo o bajando?
+Comparaciones obligatorias (overlays):
+
+Tu guild (línea sólida, color principal)
+Promedio nacional (línea punteada gris)
+Rival (línea punteada roja — si hay guerra activa, muestra al enemigo)
+Interacción: Tap en cada vértice = desglose detallado del atributo.
+
+Psicología: El radar es la identidad visual de la guild. "Somos una guild de fuerza bruta pero nos falta consistencia" — esto genera conversación y metas colectivas. Es literalmente el stat sheet de un personaje de RPG, pero para el grupo.
+
+🏆 NIVEL 3 — HISTORY (Scroll profundo — legado)
+4.3.1 — Hall of Legends
+Miembros que lograron cosas extraordinarias DENTRO de esta guild:
+
+Leyenda	Criterio
+Iron Founder	Creó la guild
+100-Day Inferno	Primera persona en llegar a racha de 100
+War Hero	MVP de 3+ guerras ganadas
+The Pillar	Miembro más antiguo activo
+Cada uno tiene un frame dorado en su avatar.
+
+Psicología: Crea héroes locales. La gente quiere ser leyenda en su guild. Es como el "Employee of the Month" pero gamificado.
+
+4.3.2 — War History
+
+⚔️ Guerra vs Iron Temple Polanco   → VICTORIA  +250 XP guild
+⚔️ Guerra vs Runners CDMX Norte    → DERROTA   "Nos faltó cardio"
+⚔️ Guerra vs Beast Mode Satélite   → VICTORIA  +250 XP guild
+Record: 2W - 1L (66% winrate)
+
+4.3.3 — Growth Timeline
+Gráfica de línea: miembros a lo largo del tiempo. Marcar hitos:
+
+"Guild creada"
+"Primera guerra ganada"
+"50 miembros"
+"Top 100 Nacional"
+5. SISTEMA DE RANKING INTERNO (DENTRO DE LA GUILD)
+¿Por qué RACHA es la métrica correcta para ranking?
+Consideré tres opciones:
+
+Métrica	Pros	Contras
+XP Total	Recompensa todo	Favorece a veteranos, nuevos nunca alcanzan
+Volumen	Objetivo y medible	Solo mide gym, ignora cardio/nutrición
+Racha	Iguala a todos, mide lo que más importa: consistencia	Puede perderse por 1 día malo
+Recomendación: "Activity Streak" compuesta
+No uses solo racha de workout. Usa una racha de actividad diaria donde un día cuenta como activo si el usuario hizo cualquiera de:
+
+Completó un workout
+Registró nutrición (food log)
+Registró ≥5,000 pasos
+Completó un check-in de wellness
+¿Por qué?
+
+Inclusividad: Un día de descanso activo (caminar + logear comida) no rompe la racha
+Engancha múltiples features: Incentiva usar TODA la app, no solo workouts
+Retención máxima: El usuario abre la app diario aunque sea para logear comida y no perder racha
+Equidad: Un runner y un powerlifter compiten en igualdad
+Ranking visual dentro de la guild:
+
+ #1  🔥 @carlos_iron     47 días   [Inferno]
+ #2  🔥 @maria_lift      41 días   [Inferno]
+ #3  ⚡ @pedro_run        28 días   [Surge]
+ ─── TÚ ESTÁS AQUÍ ──────────────
+ #14 💪 @tu_username      12 días   [Iron]
+ #15 💪 @ana_fit          11 días   [Iron]
+Tu posición siempre visible con highlight
+Flechita ↑↓ indicando si subiste o bajaste vs ayer
+Top 3 tienen corona/medalla
+Psicología: La racha como ranking convierte cada día en una decisión: "Si no entreno hoy, @ana_fit me pasa." Es presión social positiva diaria. A diferencia del XP (que es acumulativo y los nuevos nunca alcanzan), la racha se puede perder EN CUALQUIER MOMENTO — el #1 está tan en riesgo como el #30.
+
+6. GUERRAS DE GUILDS (DISEÑO CONCEPTUAL)
+6.1 — Cómo funcionan
+
+FLUJO:
+Guild A lanza desafío → Guild B acepta (24h para aceptar) → 
+Guerra dura 5 días → Contribuciones individuales suman → 
+Guild con más puntos gana → Recompensas distribuidas
+6.2 — Tipos de Batalla
+Tipo	Métrica	Duración	Frecuencia
+Total War	Puntos combinados (workouts + pasos + nutrición)	5 días	Máx 1/mes
+Iron Clash	Volumen total levantado (kg)	3 días	Máx 2/mes
+Marathon	Pasos colectivos	7 días	Máx 2/mes
+Consistency Battle	% de miembros que mantienen racha durante la guerra	5 días	Máx 1/mes
+6.3 — Cómo contribuyen los miembros
+Cada miembro gana War Points (WP) diarios:
+
+Completar workout: +10 WP
+Registrar nutrición completa: +5 WP
+≥8,000 pasos: +5 WP
+Mantener racha: +3 WP (bonus diario)
+PR personal durante guerra: +15 WP (bonus)
+Los WP de todos los miembros se suman. Pero se normalizan por miembro activo (para que una guild de 50 no aplaste a una de 20).
+
+Fórmula: Total WP / Miembros activos durante la guerra
+
+6.4 — Recompensas
+Guild ganadora:
+
++250 XP para la guild (sube en ranking nacional)
++50 XP para cada miembro que contribuyó
+Badge "War Victor" (acumulable: Bronze 1 win, Silver 5, Gold 15)
+War Trophy que aparece en el Guild HQ
+Guild perdedora:
+
++25 XP para cada miembro que contribuyó (participar siempre da algo)
+Se muestra qué atributo perdieron (educativo: "perdimos en consistencia")
+MVP de la guerra:
+
++100 XP adicional
+Mención en Hall of Legends si gana MVP 3+ veces
+6.5 — Balance Anti-Abuso
+Problema	Solución
+Guild gigante vs pequeña	Normalización per capita
+Spam de micro-workouts	Mínimo 20 min por workout para contar WP
+Guild inactiva lanza guerra	Requiere ≥60% miembros activos en última semana para lanzar
+Farming de guerras fáciles	Matchmaking por ranking: solo puedes desafiar ±20 posiciones
+Miembros fantasma inflan ratio	Solo cuentan miembros con ≥1 actividad en últimos 7 días
+6.6 — Presencia en Tab Social
+Las guerras VIVEN en la tab de Retos, pero tienen presencia constante en Social:
+
+Banner de Guerra en el Pulse del Guild HQ (barra de progreso, tiempo restante)
+Notificación "guild under attack" cuando alguien te desafía
+After-war summary card en el Guild HQ por 48h post-guerra
+7. FLUJO DE USUARIO: NUEVO → PRIMERA GUILD
+
+PASO 1: Onboarding (ya existe)
+  → Usuario selecciona su gym (Place)
+  → Se le asigna automáticamente la Forge Guild de ese gym
+
+PASO 2: Primera entrada al Tab Social
+  → Pantalla de bienvenida: "Bienvenido a tu Forge ⚒️"
+  → Muestra el Guild HQ con datos reales (aunque escasos)
+  → Mini-tutorial: "Esta es la sala de guerra de tu gym"
+  → CTA: "Invita a alguien de tu gym" (deep link)
+
+PASO 3: Discover
+  → Las primeras sugerencias son SIEMPRE del mismo gym
+  → Al seguir a alguien: micro-celebración + "Ahora comparten stats"
+
+PASO 4: Engagement loop
+  → Día 2: Push → "Tu Forge está en #847 nacional. Entrena para subir."
+  → Día 3: Push → "12 de tu gym entrenaron hoy. ¿Y tú?"  
+  → Día 7: Desbloqueado → "Puedes unirte a 1 guild más. ¿War Party con amigos?"
+
+PASO 5: Segunda guild
+  → Al alcanzar 7 días de racha, se desbloquea el slot de guild adicional
+  → Browse Guilds muestra recomendaciones basadas en hobbies e intereses
+  → Crear War Party requiere invitar mínimo 5 personas
+Psicología del flujo: El usuario NUNCA está "solo" en FitHub. Desde el minuto 1 pertenece a algo. La Forge Guild es automática — zero friction. Las siguientes guilds son electivas — se ganan con consistencia.
+
+8. IDEAS ADICIONALES DE ALTO IMPACTO
+8.1 — "Guild Anthem" (Audio Identity)
+Cada guild puede elegir un sonido de 3 segundos (de una biblioteca predefinida) que suena cuando:
+
+Un miembro completa un workout
+La guild gana una guerra
+Un miembro llega a racha de 30
+Por qué: El sonido crea identidad sensorial. Como el sonido de victoria en Clash Royale. Pavlov.
+
+8.2 — "Forge Nights" (Eventos de Actividad Colectiva)
+El Founder puede declarar un Forge Night: una ventana de 3 horas donde todo workout completado da 2x War Points y 2x XP.
+
+Máximo 2 por semana
+Requiere 24h de antelación (se notifica a todos)
+Incentiva que la guild entrene JUNTA en el mismo horario
+Por qué: Sincroniza el comportamiento del grupo. Crea rituales. "Los martes a las 7pm es Forge Night en SmartFit Condesa."
+
+8.3 — "The Pact" (Compromiso Social)
+Un miembro puede crear un Pact con 2-4 miembros de su guild:
+
+"Entre
+
+
+Resumen de lo implementado
+Backend (Prisma + API)
+Prisma Schema — schema.prisma
+
+Guild model — name, tag (unique), type (FORGE/WAR_PARTY/OPEN), motto, colors, level/xp, cached stats, linked to Place for Forge guilds
+GuildMember model — role (FOUNDER/WARDEN/CAPTAIN/MEMBER/RECRUIT), isPrimary, joinedAt
+Enums: GuildType, GuildRole
+Guilds API — guilds.ts — 8 endpoints:
+
+Endpoint	Funcion
+POST /api/guilds	Crear guild (valida tag, limite de 3, forge link)
+GET /api/guilds/mine	Mis guilds con role y stats
+GET /api/guilds/:id	Guild HQ data
+GET /api/guilds/:id/members	Miembros rankeados por racha + streak tiers
+GET /api/guilds/:id/stats	Pulse + Arena (rhythm, streak dist, radar, volume, steps)
+POST /api/guilds/:id/join	Unirse (valida capacidad, limite, tipo)
+DELETE /api/guilds/:id/leave	Dejar (founder no puede)
+POST /api/guilds/:id/invite	Invitar a War Party
+PUT /api/guilds/:id/members/:mid/role	Promover/degradar (respeta caps)
+GET /api/guilds/browse/all	Explorar guilds con filtros
+PUT /api/guilds/:id	Editar guild (founder/warden)
+Discover mejorado — social.ts — ahora retorna:
+
+sections[] categorizadas: "Entrenan en tu gym", "Tu nivel", "Para ti"
+Cada usuario con matchReasons[]: "Entrenan en SmartFit", "Racha similar: 18 dias", "Tambien hace Running y Gym"
+Scoring expandido: mutuals (+30), racha similar (+15), nivel cercano (+10)
+Mobile (React Native)
+Tab Social reestructurada — social.tsx
+
+Sub-tab switcher: Discover | Guilds
+DiscoverTab — DiscoverTab.tsx
+
+Secciones horizontales por categoria con iconos
+Cards con avatar, level, streak + match reasons visibles
+Follow inline con estado "Siguiendo"
+GuildsTab — GuildsTab.tsx
+
+"Mis Guilds" (cards con role badge, color accent, stats)
+"Explorar Guilds" con filtros (Todas/Forge/Abiertas)
+CTA "Crear Guild" si hay slots disponibles
+Guild HQ — /guild/[guildId].tsx — 3 secciones:
+
+Pulso: Activity Orb (color dinamico por % activos), racha promedio, rank nacional, volumen, pasos
+Arena: Ritmo semanal (barras), Rangos de racha (Inferno/Surge/Iron/Seedling/Fallen), Radar DNA (6 atributos), Volume + Steps cards
+Miembros: Ranking por racha, tier badges, role labels
+Create Guild — /guild/create.tsx
+
+Selector de tipo (Forge/War Party/Open)
+Nombre, Tag (auto-uppercase), Motto, Descripcion
+Color picker (8 opciones)
+Preview card en tiempo real
+Validacion de gym para Forge
+
+Fases 4-6 completadas. Todo compila limpio (0 errores backend + mobile). Resumen de lo implementado:
+
+Fase 4 — Stats & Graficas (Guild HQ mejorado)
+Pulse: Activity Orb con glow, War Banner con barra de progreso en tiempo real, CTAs de guerra
+Arena mejorada:
+Consistency Heatmap estilo GitHub (4 semanas × 7 dias)
+Comparaciones Week-over-Week (volumen y pasos con flechas +/-%)
+Steps Odometer (pasos de hoy vs meta diaria de guild)
+MVP de la semana con avatar y volumen
+History tab (nuevo):
+Hall of Legends (Iron Founder, 100-Day Inferno, The Pillar, Streak King, War Hero)
+War Record (wins/losses/winrate) + lista de guerras completadas
+Growth Timeline con hitos de membresia
+Fase 5 — Guild Wars
+Prisma: GuildWar + GuildWarContribution models con enums WarType/WarStatus
+Backend (guild-wars.ts):
+POST /:guildId/challenge — Lanzar desafio con validaciones anti-abuso (60% activos, matchmaking ±20 ranks)
+POST /wars/:warId/respond — Aceptar/declinar (24h deadline)
+GET /wars/:warId — Detalle con scoreboard y leaderboard
+POST /wars/:warId/sync — Sincronizar contribucion diaria (auto-calcula WP: workout +10, nutrition +5, steps +5, streak +3, PR +15)
+POST /wars/:warId/resolve — Resolver guerra, determinar ganador, MVP, repartir XP
+GET /:guildId/rivals — Browse rivales disponibles
+4 tipos de guerra: Total War (5d), Iron Clash (3d), Marathon (7d), Consistency (5d)
+Scoring normalizado per capita para evitar que guilds grandes aplasten a pequenas
+Fase 6 — Ranking & Mobile Screens
+Challenge screen (challenge.tsx): Seleccionar tipo de guerra + rival
+War detail screen ([warId].tsx): Scoreboard en vivo, sync button, WP breakdown, leaderboard

@@ -23,6 +23,8 @@ import onboardingRouter from './routes/onboarding.js'
 import placesRouter from './routes/places.js'
 import profileRouter from './routes/profile.js'
 import wellnessRouter from './routes/wellness.js'
+import guildsRouter from './routes/guilds.js'
+import guildWarsRouter from './routes/guild-wars.js'
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -93,6 +95,8 @@ app.use("/api/onboarding", onboardingRouter)
 app.use("/api/places", placesRouter)
 app.use("/api/profile", profileRouter)
 app.use("/api/wellness", wellnessRouter)
+app.use("/api/guilds", guildsRouter)
+app.use("/api/guild-wars", guildWarsRouter)
 
 // ─── MANEJADOR CENTRAL DE ERRORES ─────────────────────
 // Debe ir después de todas las rutas para capturar next(error)

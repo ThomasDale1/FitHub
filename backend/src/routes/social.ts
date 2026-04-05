@@ -135,36 +135,177 @@ router.get("/following", async (req: Request, res: Response) => {
   }
 })
 
-// GET /api/social/discover — Descubrir usuarios
+// GET /api/social/discover — Smart discover with match reasons & sections
 router.get("/discover", async (req: Request, res: Response) => {
   try {
     const { userId: clerkId } = getAuth(req)
-    const user = await getUserByClerkId(clerkId!)
+    const user = await prisma.user.findUnique({
+      where: { clerkId: clerkId! },
+      include: {
+        hobbies: true,
+        places: { where: { isPrimary: true }, take: 1 },
+        following: { select: { followingId: true } },
+      },
+    })
     if (!user) { res.status(404).json({ error: "Usuario no encontrado" }); return }
 
-    // IDs que ya sigo
-    const myFollowing = await prisma.follow.findMany({
-      where: { followerId: user.id },
-      select: { followingId: true },
-    })
-    const followingIds = myFollowing.map((f) => f.followingId)
+    const followingIds = user.following.map((f) => f.followingId)
+    const myHobbySlugs = user.hobbies.map((h) => h.hobbySlug)
+    const myPlaceId = user.places[0]?.placeId || null
+    const myAge = user.dateOfBirth
+      ? Math.floor((Date.now() - user.dateOfBirth.getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+      : null
 
-    // Usuarios sugeridos: los más activos que no sigo
-    const suggestions = await prisma.user.findMany({
+    // Fetch candidates with all data needed for scoring
+    const candidates = await prisma.user.findMany({
       where: {
         id: { notIn: [user.id, ...followingIds] },
+        onboardingCompleted: true,
       },
       select: {
         id: true, name: true, username: true, avatarUrl: true,
         xp: true, level: true, streak: true, bio: true,
-        _count: { select: { workouts: { where: { isCompleted: true } } } },
+        experienceLevel: true, dateOfBirth: true,
+        hobbies: { select: { hobbySlug: true } },
+        places: { where: { isPrimary: true }, select: { placeId: true, place: { select: { name: true } } } },
+        _count: { select: { workouts: { where: { isCompleted: true } }, followers: true } },
       },
-      orderBy: { xp: "desc" },
-      take: 20,
+      take: 150,
+      orderBy: { updatedAt: "desc" }, // or xp, createdAt, etc.
     })
 
-    res.json({ suggestions })
+    // Mutual friends: people who follow ME that also follow the candidate
+    const myFollowerIds = (await prisma.follow.findMany({
+      where: { followingId: user.id },
+      select: { followerId: true },
+    })).map((f) => f.followerId)
+
+    const mutualMap = new Map<string, number>()
+    if (myFollowerIds.length > 0) {
+      const mutuals = await prisma.follow.groupBy({
+        by: ["followingId"],
+        where: {
+          followerId: { in: myFollowerIds },
+          followingId: { in: candidates.map((c) => c.id) },
+        },
+        _count: true,
+      })
+      for (const m of mutuals) {
+        mutualMap.set(m.followingId, m._count)
+      }
+    }
+
+    // Score & build matchReasons for each candidate
+    const scored = candidates.map((c) => {
+      let score = 0
+      const matchReasons: string[] = []
+
+      // Same gym: +40
+      const matchingPlace = myPlaceId ? c.places.find((p) => p.placeId === myPlaceId) : null
+      const placeName = matchingPlace?.place?.name || c.places[0]?.place?.name || null
+
+      if (matchingPlace) {
+        score += 40
+        if (placeName) {
+          matchReasons.push(`Entrenan en ${placeName}`)
+        }
+      }
+
+      // Mutual connections: +30
+      const mutualCount = mutualMap.get(c.id) || 0
+      if (mutualCount > 0) {
+        score += Math.min(mutualCount * 10, 30)
+        matchReasons.push(`${mutualCount} ${mutualCount === 1 ? "amigo" : "amigos"} en común`)
+      }
+
+      // Shared hobbies: +20 each
+      const theirHobbies = c.hobbies.map((h) => h.hobbySlug)
+      const shared = myHobbySlugs.filter((s) => theirHobbies.includes(s))
+      if (shared.length > 0) {
+        score += shared.length * 20
+        const hobbyLabels: Record<string, string> = {
+          gym: "Gym", running: "Running", yoga: "Yoga", crossfit: "CrossFit",
+          swimming: "Natación", cycling: "Ciclismo", calisthenics: "Calistenia",
+          martial_arts: "Artes marciales", hiking: "Senderismo",
+        }
+        const names = shared.slice(0, 2).map((s) => hobbyLabels[s] || s)
+        matchReasons.push(`También hace ${names.join(" y ")}`)
+      }
+
+      // Similar streak (±5): +15
+      if (user.streak > 0 && c.streak > 0 && Math.abs(user.streak - c.streak) <= 5) {
+        score += 15
+        matchReasons.push(`Racha similar: ${c.streak} días`)
+      }
+
+      // Similar level (±2): +10
+      if (Math.abs(user.level - c.level) <= 2) {
+        score += 10
+        matchReasons.push(`Nivel ${c.level}`)
+      }
+
+      // Similar age (±5 years): +10
+      if (myAge && c.dateOfBirth) {
+        const theirAge = Math.floor((Date.now() - c.dateOfBirth.getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+        if (Math.abs(myAge - theirAge) <= 5) {
+          score += 10
+          matchReasons.push("Edad similar")
+        }
+      }
+
+      // Same experience level: +10
+      if (user.experienceLevel && c.experienceLevel === user.experienceLevel) {
+        score += 10
+      }
+
+      // Has avatar: +5
+      if (c.avatarUrl) score += 5
+
+      return {
+        id: c.id,
+        name: c.name,
+        username: c.username,
+        avatarUrl: c.avatarUrl,
+        xp: c.xp,
+        level: c.level,
+        streak: c.streak,
+        bio: c.bio,
+        experienceLevel: c.experienceLevel,
+        workoutsCount: c._count.workouts,
+        followersCount: c._count.followers,
+        placeName,
+        sameGym: myPlaceId ? c.places.some((p) => p.placeId === myPlaceId) : false,
+        matchReasons: matchReasons.slice(0, 3),
+        score,
+        mutualCount,
+      }
+    }).filter((s) => s.score > 0)
+
+    scored.sort((a, b) => b.score - a.score)
+
+    // Categorize into sections
+    const sameGym = scored.filter((s) => s.sameGym).slice(0, 10)
+    const sameGymIds = new Set(sameGym.map((s) => s.id))
+
+    const yourLevel = scored
+      .filter((s) => !sameGymIds.has(s.id) && Math.abs(s.level - user.level) <= 2)
+      .slice(0, 10)
+    const yourLevelIds = new Set(yourLevel.map((s) => s.id))
+
+    const usedIds = new Set([...sameGymIds, ...yourLevelIds])
+    const forYou = scored.filter((s) => !usedIds.has(s.id)).slice(0, 10)
+
+    res.json({
+      sections: [
+        ...(sameGym.length > 0 ? [{ key: "sameGym", title: "Entrenan en tu gym", data: sameGym }] : []),
+        ...(yourLevel.length > 0 ? [{ key: "yourLevel", title: "Tu nivel", data: yourLevel }] : []),
+        ...(forYou.length > 0 ? [{ key: "forYou", title: "Para ti", data: forYou }] : []),
+      ],
+      // Flat list for backwards compat
+      suggestions: scored.slice(0, 20),
+    })
   } catch (error) {
+    console.error("Discover error:", error)
     res.status(500).json({ error: "Error al descubrir usuarios" })
   }
 })

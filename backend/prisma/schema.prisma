@@ -79,6 +79,8 @@ model User {
   userBadges               UserBadge[]
   notifications            Notification[]           @relation("UserNotifications")
 
+  guildWarContributions    GuildWarContribution[]
+
   dailySteps               DailySteps[]
   pushTokens               PushToken[]
   media                    Media[]
@@ -100,6 +102,10 @@ model User {
   breathingSessions        BreathingSession[]
   sorenessLogs             SorenessLog[]
   readinessScores          ReadinessScore[]
+
+  // Guilds (Sprint 8 — Social)
+  createdGuilds            Guild[]              @relation("GuildCreator")
+  guildMemberships         GuildMember[]
 
   @@map("users")
 }
@@ -831,6 +837,7 @@ model Place {
 
   createdBy User      @relation("PlaceCreator", fields: [createdById], references: [id])
   members   UserPlace[]
+  guild     Guild?       // FORGE guild auto-linked to this place
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1039,4 +1046,173 @@ model SorenessLog {
   @@unique([userId, date])
   @@index([userId, date])
   @@map("soreness_logs")
+}
+
+// ═══════════════════════════════════════════════════════
+// ─── GUILDS SYSTEM (Sprint 8 — Social) ────────────────
+// ═══════════════════════════════════════════════════════
+
+enum GuildType {
+  FORGE       // Gym-based (auto-created per Place)
+  WAR_PARTY   // Private (invite-only, friends)
+  OPEN        // Public (anyone can request to join)
+}
+
+enum GuildRole {
+  FOUNDER
+  WARDEN      // Admin (max 3)
+  CAPTAIN     // Moderator (max 5)
+  MEMBER
+  RECRUIT     // 7-day probation
+}
+
+model Guild {
+  id          String    @id @default(cuid())
+  name        String
+  tag         String    @unique   // 2-5 char tag e.g. "IRWV"
+  type        GuildType
+  motto       String?             // Editable motto, max 60 chars
+  description String?
+  iconUrl     String?             // Guild emblem image
+  colorPrimary   String  @default("#6C63FF")
+  colorSecondary String  @default("#1A1A2E")
+
+  // Capacity
+  maxMembers  Int       @default(30)
+  level       Int       @default(1)
+  xp          Int       @default(0)
+
+  // Linked Place (only for FORGE guilds)
+  placeId     String?   @unique   // 1:1 with Place for FORGE type
+  place       Place?    @relation(fields: [placeId], references: [id])
+
+  // Creator
+  creatorId   String?
+  creator     User?     @relation("GuildCreator", fields: [creatorId], references: [id], onDelete: SetNull)
+
+  // Stats (cached, updated periodically)
+  avgStreak       Float   @default(0)
+  activeMembersToday Int  @default(0)
+  totalVolume     Float   @default(0)
+  totalSteps      Int     @default(0)
+  nationalRank    Int?
+
+  members     GuildMember[]
+
+  // Wars
+  warsAsChallenger GuildWar[] @relation("WarChallenger")
+  warsAsDefender   GuildWar[] @relation("WarDefender")
+
+  guildWarContributions GuildWarContribution[]
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([type])
+  @@index([nationalRank])
+  @@map("guilds")
+}
+
+model GuildMember {
+  id        String    @id @default(cuid())
+  guildId   String
+  userId    String
+  role      GuildRole @default(RECRUIT)
+  isPrimary Boolean   @default(false)  // Is this the user's main guild?
+
+  guild     Guild     @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  joinedAt  DateTime  @default(now())
+  promotedAt DateTime?
+
+  @@unique([guildId, userId])
+  @@index([userId])
+  @@map("guild_members")
+}
+
+// ═══════════════════════════════════════════════════════
+// ─── GUILD WARS (Sprint 8 — Phase 5) ──────────────────
+// ═══════════════════════════════════════════════════════
+
+enum WarType {
+  TOTAL_WAR         // Combined points (workouts + steps + nutrition)
+  IRON_CLASH        // Total volume lifted (kg)
+  MARATHON          // Collective steps
+  CONSISTENCY       // % members maintaining streak during war
+}
+
+enum WarStatus {
+  PENDING           // Challenge sent, awaiting acceptance
+  ACTIVE            // War in progress
+  COMPLETED         // War finished, winner determined
+  DECLINED          // Challenge was declined
+  CANCELLED         // Cancelled before acceptance
+}
+
+model GuildWar {
+  id              String    @id @default(cuid())
+  type            WarType
+  status          WarStatus @default(PENDING)
+
+  // Participants
+  challengerGuildId String
+  defenderGuildId   String
+  challengerGuild   Guild   @relation("WarChallenger", fields: [challengerGuildId], references: [id], onDelete: Cascade)
+  defenderGuild     Guild   @relation("WarDefender", fields: [defenderGuildId], references: [id], onDelete: Cascade)
+
+  // Scoring (normalized per active member)
+  challengerScore Float     @default(0)
+  defenderScore   Float     @default(0)
+  challengerActive Int      @default(0)  // Active members during war
+  defenderActive   Int      @default(0)
+
+  // Winner
+  winnerGuildId   String?
+  mvpUserId       String?   // Most War Points in winning guild
+
+  // Timing
+  durationDays    Int       @default(5)
+  startDate       DateTime?
+  endDate         DateTime?
+  acceptDeadline  DateTime  // 24h to accept
+
+  // Rewards
+  xpReward        Int       @default(250)
+
+  contributions   GuildWarContribution[]
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([challengerGuildId])
+  @@index([defenderGuildId])
+  @@index([status])
+  @@map("guild_wars")
+}
+
+model GuildWarContribution {
+  id        String   @id @default(cuid())
+  warId     String
+  userId    String
+  guildId   String   // Which guild this user contributed for
+  date      DateTime @db.Date
+
+  // War Points breakdown
+  workoutWP   Int    @default(0)  // +10 per workout
+  nutritionWP Int    @default(0)  // +5 per full nutrition log
+  stepsWP     Int    @default(0)  // +5 for >=8000 steps
+  streakWP    Int    @default(0)  // +3 streak bonus
+  prWP        Int    @default(0)  // +15 for PR during war
+  totalWP     Int    @default(0)
+
+  war       GuildWar @relation(fields: [warId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  guild     Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([warId, userId, date])
+  @@index([warId, guildId])
+  @@map("guild_war_contributions")
 }

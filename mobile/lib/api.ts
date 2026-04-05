@@ -792,6 +792,56 @@ export const socialAPI = {
   markNotificationsRead: () => api.put("/api/social/notifications/read"),
 };
  
+// ─── Guilds API (Sprint 8 — Social) ──────────────────
+export const guildsAPI = {
+  getMine: () => api.get("/api/guilds/mine"),
+  getById: (id: string) => api.get(`/api/guilds/${id}`),
+  getMembers: (id: string) => api.get(`/api/guilds/${id}/members`),
+  getStats: (id: string) => api.get(`/api/guilds/${id}/stats`),
+  browse: (params?: { type?: string; search?: string }) =>
+    api.get("/api/guilds/browse/all", { params }),
+  create: (data: {
+    name: string;
+    tag: string;
+    type: "FORGE" | "WAR_PARTY" | "OPEN";
+    motto?: string;
+    description?: string;
+    maxMembers?: number;
+    colorPrimary?: string;
+    colorSecondary?: string;
+    placeId?: string;
+  }) => api.post("/api/guilds", data),
+  update: (id: string, data: {
+    motto?: string;
+    description?: string;
+    colorPrimary?: string;
+    colorSecondary?: string;
+    iconUrl?: string;
+  }) => api.put(`/api/guilds/${id}`, data),
+  join: (id: string) => api.post(`/api/guilds/${id}/join`),
+  leave: (id: string) => api.delete(`/api/guilds/${id}/leave`),
+  invite: (id: string, targetUserId: string) =>
+    api.post(`/api/guilds/${id}/invite`, { targetUserId }),
+  updateRole: (guildId: string, memberId: string, role: string) =>
+    api.put(`/api/guilds/${guildId}/members/${memberId}/role`, { role }),
+  getHistory: (id: string) => api.get(`/api/guilds/${id}/history`),
+  getRivals: (id: string) => api.get(`/api/guild-wars/${id}/rivals`),
+};
+
+// ─── Guild Wars API (Sprint 8) ──────────────────────────
+export const guildWarsAPI = {
+  challenge: (guildId: string, data: { defenderGuildId: string; type: string }) =>
+    api.post(`/api/guild-wars/${guildId}/challenge`, data),
+  respond: (warId: string, accept: boolean) =>
+    api.post(`/api/guild-wars/wars/${warId}/respond`, { accept }),
+  getDetails: (warId: string) =>
+    api.get(`/api/guild-wars/wars/${warId}`),
+  syncContribution: (warId: string) =>
+    api.post(`/api/guild-wars/wars/${warId}/sync`),
+  resolve: (warId: string) =>
+    api.post(`/api/guild-wars/wars/${warId}/resolve`),
+};
+
 // ─── Challenges API (Sprint 4) ────────────────────────
 export const challengesAPI = {
   getAll: (filter: "active" | "mine" | "available" = "active") =>
